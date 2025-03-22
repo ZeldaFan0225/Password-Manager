@@ -27,6 +27,20 @@ interface RouteGenericUpdateVault {
     Params: { id: string };
 }
 
+interface UpdateMasterPasswordBody {
+    encryptedUserId: string;
+    passwords: Array<{
+        id: number;
+        encryptedData: string;
+        iv: string;
+    }>;
+}
+
+interface RouteGenericUpdateMasterPassword {
+    Body: UpdateMasterPasswordBody;
+    Params: { id: string };
+}
+
 interface RouteGenericStorePassword {
     Body: StorePasswordBody;
     Params: { id: string };
@@ -354,6 +368,43 @@ export async function vaultRoutes(server: FastifyInstance) {
             return { success: true };
         } catch (error) {
             server.log.error(error);
+            return reply.code(500).send({ error: 'Internal Server Error' });
+        }
+    });
+
+    // Update master password and re-encrypted passwords
+    server.post<RouteGenericUpdateMasterPassword>('/:id/update-master-password', {
+        schema: {
+            security: [{ bearerAuth: [] }],
+            params: Type.Object({
+                id: Type.String(),
+            }),
+            body: Type.Object({
+                encryptedUserId: Type.String(),
+                passwords: Type.Array(Type.Object({
+                    id: Type.Number(),
+                    encryptedData: Type.String(),
+                    iv: Type.String(),
+                })),
+            }),
+            response: {
+                200: Type.Object({
+                    success: Type.Boolean(),
+                }),
+            },
+        },
+    }, async (request, reply) => {
+        const vaultId = Number(request.params.id);
+        const user = request.user as User;
+
+        try {
+            await server.db.updateMasterPassword(vaultId, user.id, request.body);
+            return { success: true };
+        } catch (error) {
+            server.log.error(error);
+            if (error instanceof Error && error.message === 'Only the owner can update master password') {
+                return reply.code(403).send({ error: error.message });
+            }
             return reply.code(500).send({ error: 'Internal Server Error' });
         }
     });

@@ -260,6 +260,49 @@ export class Database {
         return result?.rowCount === 1;
     }
 
+    public async updateMasterPassword(vaultId: number, userId: number, data: {
+        encryptedUserId: string;
+        passwords: Array<{
+            id: number;
+            encryptedData: string;
+            iv: string;
+        }>;
+    }): Promise<void> {
+        const client = await this.pool?.connect();
+        try {
+            // Check if user is the owner of the vault
+            const accessQuery = "SELECT * FROM vault_access WHERE vault_id = $1 AND user_id = $2 AND role = 'OWNER'";
+            const accessResult = await client?.query(accessQuery, [vaultId, userId]);
+            
+            if (!accessResult?.rows.length) {
+                throw new Error('Only the owner can update master password');
+            }
+
+            await client?.query('BEGIN');
+
+            // Update vault with new encrypted user ID
+            await client?.query(
+                'UPDATE vaults SET encrypted_user_id = $1 WHERE id = $2',
+                [data.encryptedUserId, vaultId]
+            );
+
+            // Update each password
+            for (const password of data.passwords) {
+                await client?.query(
+                    'UPDATE passwords SET data = $1, iv = $2 WHERE id = $3 AND vault_id = $4',
+                    [Buffer.from(password.encryptedData, 'hex'), password.iv, password.id, vaultId]
+                );
+            }
+
+            await client?.query('COMMIT');
+        } catch (error) {
+            await client?.query('ROLLBACK');
+            throw error;
+        } finally {
+            client?.release();
+        }
+    }
+
     public async deleteVault(id: number, userId: number): Promise<boolean> {
         // Check if user is the owner of the vault
         const accessQuery = "SELECT * FROM vault_access WHERE vault_id = $1 AND user_id = $2 AND role = 'OWNER'";
