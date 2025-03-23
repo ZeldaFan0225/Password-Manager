@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import Disclaimer from '@/components/Disclaimer';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getApiBaseUrl } from '@/lib/config';
@@ -181,6 +182,7 @@ export default function RegisterPage() {
             </Link>
           </div>
         </form>
+        <Disclaimer />
       </div>
     </div>
   );

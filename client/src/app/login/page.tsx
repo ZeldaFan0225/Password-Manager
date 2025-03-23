@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import Disclaimer from '@/components/Disclaimer';
 import { useRouter } from 'next/navigation';
 import { getApiBaseUrl } from '@/lib/config';
 import * as srp from 'secure-remote-password/client';
@@ -179,6 +180,7 @@ export default function LoginPage() {
                         </button>
                     </div>
                 </form>
+                <Disclaimer />
             </div>
         </div>
     );
