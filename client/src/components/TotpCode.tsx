@@ -26,6 +26,7 @@ export default function TotpCode({ secret, onCopy }: TotpCodeProps) {
     const [code, setCode] = useState<string>('');
     const [timeRemaining, setTimeRemaining] = useState<number>(30);
     const [isValid, setIsValid] = useState<boolean>(false);
+    const [isCopied, setIsCopied] = useState(false);
     
     // Use a ref for direct DOM manipulation for smooth animation
     const circleRef = useRef<SVGCircleElement>(null);
@@ -105,6 +106,8 @@ export default function TotpCode({ secret, onCopy }: TotpCodeProps) {
         
         try {
             await navigator.clipboard.writeText(code);
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 5000);
             if (onCopy) {
                 onCopy(code);
             }
@@ -150,10 +153,21 @@ export default function TotpCode({ secret, onCopy }: TotpCodeProps) {
                 </svg>
             </div>
             <button
+                type="button"
                 onClick={copyToClipboard}
-                className="text-indigo-600 hover:text-indigo-900 text-sm"
+                className={`focus:outline-none transition-colors ${isCopied ? 'text-green-500' : 'text-gray-400 hover:text-gray-600'}`}
+                aria-label={isCopied ? "Copied!" : "Copy code"}
             >
-                Copy
+                {isCopied ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                        <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                    </svg>
+                )}
             </button>
         </div>
     );

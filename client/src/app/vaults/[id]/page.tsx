@@ -1,13 +1,15 @@
 'use client';
 
-import { use, useState, useEffect, useCallback, useRef } from 'react';
+import { use, useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiBaseUrl } from '@/lib/config';
 import crypto from 'crypto';
 import PasswordInput from '@/components/PasswordInput';
-import PasswordForm, { DecryptedPassword } from '@/components/PasswordForm';
-import PasswordView from '@/components/PasswordView';
-import { resolve } from 'path';
+import { DecryptedPassword } from '@/components/PasswordForm';
+import PasswordList from '@/components/vault/PasswordList';
+import PasswordSection from '@/components/vault/PasswordSection';
+import VaultSettings from '@/components/vault/VaultSettings';
+import ChangePasswordModal from '@/components/vault/ChangePasswordModal';
 
 interface EncryptedPassword {
     id: number;
@@ -37,10 +39,10 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
     const [isUnlocking, setIsUnlocking] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isChangingPassword, setIsChangingPassword] = useState(false);
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [vault, setVault] = useState<Vault | null>(null);
     const [passwords, setPasswords] = useState<EncryptedPassword[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [selectedPassword, setSelectedPassword] = useState<number | null>(null);
     const [decryptedData, setDecryptedData] = useState<{ [id: number]: DecryptedPassword }>({});
     const [selectedDecryptedData, setSelectedDecryptedData] = useState<DecryptedPassword | null>(null);
@@ -50,18 +52,11 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
     const [progress, setProgress] = useState('');
     // Store the encryption key in memory only
     const [encryptionKey, setEncryptionKey] = useState<Buffer | null>(null);
-    // Auto-lock settings
-    const [autoLockTimeout, setAutoLockTimeout] = useState(5); // Default 5 minutes
-    const [autoLockProgress, setAutoLockProgress] = useState(100); // Progress percentage
-    const autoLockTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [changePasswordFormData, setChangePasswordFormData] = useState<ChangePasswordFormData>({
         currentPassword: '',
         newPassword: '',
         confirmPassword: '',
     });
-
-    // Form references
-    const changePasswordFormRef = useRef<HTMLFormElement>(null);
 
     // Utility functions
     function deriveKey(password: string, salt: string): Buffer {
@@ -94,16 +89,6 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
         encrypted = Buffer.concat([encrypted, cipher.final()]);
         return `${iv.toString('hex')}:${encrypted.toString('hex')}`;
     }
-
-    // Cleanup function for globe icons
-    const cleanupGlobeIcons = () => {
-        // Find all containers that might have globe icons
-        const containers = document.querySelectorAll('.w-4.h-4.flex-shrink-0');
-        containers.forEach(container => {
-            const globeIcons = container.querySelectorAll('img[src="/globe.svg"]');
-            globeIcons.forEach(icon => icon.remove());
-        });
-    };
 
     // Callback hooks
     const loadVault = useCallback(async () => {
@@ -140,14 +125,10 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
 
     const decryptPassword = useCallback(async (password: EncryptedPassword) => {
         try {
-            // Clean up any existing globe icons before switching passwords
-            cleanupGlobeIcons();
-
             if (!encryptionKey) {
                 throw new Error('Encryption key not available');
             }
 
-            // Clear any previous errors
             setError('');
 
             const iv = Buffer.from(password.iv, 'hex');
@@ -161,7 +142,6 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                 const data: DecryptedPassword = JSON.parse(decrypted.toString());
                 const newData = { ...data, id: password.id };
                 
-                // Update the state only after successful decryption
                 setDecryptedData(prev => ({ ...prev, [password.id]: newData }));
                 setSelectedDecryptedData(newData);
                 setSelectedPassword(password.id);
@@ -173,7 +153,6 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
             console.error('Failed to decrypt password:', err);
             setError(err instanceof Error ? err.message : 'Failed to decrypt password');
             
-            // Clear the selected password when decryption fails
             setSelectedPassword(null);
             setSelectedDecryptedData(null);
         }
@@ -197,7 +176,6 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                 throw new Error('Failed to delete password');
             }
 
-            // Remove from state
             setPasswords(prev => prev.filter(p => p.id !== passwordId));
             setDecryptedData(prev => {
                 const newData = { ...prev };
@@ -213,7 +191,6 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
     }, [id]);
 
     const handleLockVault = useCallback(() => {
-        // Clear sensitive data from memory
         setEncryptionKey(null);
         setDecryptedData({});
         setSelectedDecryptedData(null);
@@ -241,7 +218,6 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                 throw new Error('Failed to delete vault');
             }
 
-            // Redirect to vaults page
             router.push('/vaults');
         } catch (err) {
             console.error('Failed to delete vault:', err);
@@ -282,7 +258,6 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                 throw new Error('Failed to save password');
             }
 
-            // Refresh password list
             const passwordsResponse = await fetch(`${getApiBaseUrl()}/vaults/${id}/passwords`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -293,7 +268,6 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                 const newPasswords = await passwordsResponse.json();
                 setPasswords(newPasswords);
 
-                // Update the decrypted data with the newly saved password
                 const decryptedPasswords: { [id: number]: DecryptedPassword } = {};
                 
                 for (const password of newPasswords) {
@@ -313,9 +287,7 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                 }
                 setDecryptedData(decryptedPasswords);
                 
-                // If we were editing, select the updated password
                 if (isEditing && data.id) {
-                    // Find the updated password in the new passwords list
                     const updatedPassword = newPasswords.find((p: any) => p.id === data.id);
                     if (updatedPassword) {
                         decryptPassword(updatedPassword);
@@ -439,7 +411,6 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                     const newData = { ...passwordData, id: password.id };
                     decryptedPasswords[password.id] = newData;
                     
-                    // Update selected password if it matches
                     if (selectedPassword === password.id) {
                         selectedDecryptedPassword = newData;
                     }
@@ -458,11 +429,6 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                 confirmPassword: '',
             });
             setIsChangingPassword(false);
-
-            // Clear the form
-            if (changePasswordFormRef.current) {
-                changePasswordFormRef.current.reset();
-            }
 
         } catch (err) {
             console.error('Failed to change master password:', err);
@@ -568,41 +534,34 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
         }
     }, [vault, verifyAndLoadPasswords, masterKey, router]);
 
-    // Auto-lock timer setup
-    const setupAutoLockTimer = useCallback(() => {
-        // Clear any existing timer
-        if (autoLockTimerRef.current) {
-            clearTimeout(autoLockTimerRef.current);
-        }
-        
-        // Set a new timer
-        autoLockTimerRef.current = setTimeout(() => {
-            if (!isUnlocking) {
-                handleLockVault();
-            }
-        }, autoLockTimeout * 60 * 1000); // Convert minutes to milliseconds
-    }, [autoLockTimeout, isUnlocking, handleLockVault]);
-    
-    // Reset timer on user activity
-    const resetAutoLockTimer = useCallback(() => {
-        setupAutoLockTimer();
-        setAutoLockProgress(100); // Reset progress bar on user activity
-    }, [setupAutoLockTimer]);
-    
-    // Effect to update progress countdown
-    useEffect(() => {
-        if (!isUnlocking && encryptionKey) {
-            const interval = setInterval(() => {
-                setAutoLockProgress(prev => {
-                    // Calculate new progress based on auto lock timeout
-                    const decrement = 100 / (autoLockTimeout * 60); // Convert minutes to seconds
-                    return Math.max(0, prev - decrement);
-                });
-            }, 1000); // Update every second
+    // Automatic vault locking
+    const TIMEOUT_MINUTES = 5;
+    const [timeLeft, setTimeLeft] = useState<number>(TIMEOUT_MINUTES * 60);
+    const lastActivityRef = useRef<number>(Date.now());
 
-            return () => clearInterval(interval);
+    function resetAutoLockTimer() {
+        const now = Date.now();
+        lastActivityRef.current = now;
+        localStorage.setItem('lastActivity', now.toString());
+        setTimeLeft(TIMEOUT_MINUTES * 60);
+    }
+
+    function checkAutoLock() {
+        const now = Date.now();
+        const elapsed = Math.floor((now - lastActivityRef.current) / 1000);
+        const remaining = TIMEOUT_MINUTES * 60 - elapsed;
+
+        if (remaining <= 0) {
+            handleLockVault();
+        } else {
+            setTimeLeft(remaining);
         }
-    }, [isUnlocking, encryptionKey, autoLockTimeout]);
+
+        // Force a re-render to update the progress bar
+        if (!isUnlocking) {
+            setTimeLeft(prev => Math.min(prev, remaining));
+        }
+    }
 
     // Effect hooks
     useEffect(() => {
@@ -610,33 +569,24 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
             loadVault();
         }
     }, [vault, isProcessing, loadVault]);
-    
-    // Set up auto-lock timer when vault is unlocked
+
     useEffect(() => {
-        if (!isUnlocking && encryptionKey) {
-        setupAutoLockTimer();
-        setAutoLockProgress(100); // Reset progress on user activity
-            
-            // Set up event listeners for user activity
-            const activityEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
-            const handleUserActivity = () => resetAutoLockTimer();
-            
-            activityEvents.forEach(event => {
-                window.addEventListener(event, handleUserActivity);
-            });
-            
+        if (!isUnlocking && !isSettingsOpen) {
+            // Set up activity monitoring
+            const events = ['mousedown', 'keydown', 'scroll'];
+            const handleActivity = () => resetAutoLockTimer();
+            events.forEach(event => document.addEventListener(event, handleActivity));
+
+            // Update timer more frequently for smoother countdown
+            const interval = setInterval(checkAutoLock, 1000); // Check every second
+            resetAutoLockTimer(); // Initialize timer
+
             return () => {
-                // Clean up event listeners and timer
-                activityEvents.forEach(event => {
-                    window.removeEventListener(event, handleUserActivity);
-                });
-                
-                if (autoLockTimerRef.current) {
-                    clearTimeout(autoLockTimerRef.current);
-                }
+                events.forEach(event => document.removeEventListener(event, handleActivity));
+                clearInterval(interval);
             };
         }
-    }, [isUnlocking, encryptionKey, setupAutoLockTimer, resetAutoLockTimer]);
+    }, [isUnlocking, isSettingsOpen, handleLockVault]);
 
     if (isUnlocking) {
         return (
@@ -702,36 +652,38 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                                 {vault?.name}
                             </h1>
                         </div>
-                        <div className="flex space-x-3">
-                            <button
-                                onClick={() => {
-                                    setIsCreating(true);
-                                    setIsEditing(false);
-                                    setSelectedPassword(null);
-                                    setSelectedDecryptedData(null);
-                                }}
-                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-                            >
-                                Add Password
-                            </button>
-                            <button
-                                onClick={() => setIsSettingsOpen(true)}
-                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-                            >
-                                Settings
-                            </button>
+                        <div className="flex items-center space-x-3">
+                            {!isSettingsOpen ? (
+                                <button
+                                    onClick={() => setIsSettingsOpen(true)}
+                                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                                >
+                                    Settings
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => setIsSettingsOpen(false)}
+                                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600"
+                                >
+                                    Back to Passwords
+                                </button>
+                            )}
                             <div className="relative">
                                 <button
                                     onClick={handleLockVault}
-                                    className="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white overflow-hidden"
+                                    className="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white overflow-hidden w-38"
                                 >
-                                    <div className="absolute inset-0 bg-yellow-600 z-0"></div>
+                                    <div className="absolute inset-0 bg-yellow-600" style={{ zIndex: 0 }}></div>
                                     <div 
-                                        className="absolute inset-0 bg-yellow-700 transition-all duration-1000 ease-linear origin-right z-1"
-                                        style={{ transform: `scaleX(${1 - autoLockProgress / 100})`, transformOrigin: 'right' }}
+                                        className="absolute inset-0 bg-yellow-700 transition-transform duration-1000 ease-linear"
+                                        style={{ 
+                                            transform: `scaleX(${1 - timeLeft / (TIMEOUT_MINUTES * 60)})`,
+                                            transformOrigin: 'right',
+                                            zIndex: 1
+                                        }}
                                     ></div>
-                                    <span className="relative z-2">
-                                        Lock Vault ({Math.ceil((autoLockProgress / 100) * autoLockTimeout)}m)
+                                    <span className="relative" style={{ zIndex: 2 }}>
+                                        Lock Vault ({Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')})
                                     </span>
                                 </button>
                             </div>
@@ -744,380 +696,93 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                         </div>
                     )}
 
-                    {/* Settings Modal */}
-                    {isSettingsOpen && (
-                        <div className="fixed inset-0 backdrop-blur-sm bg-gray-500/50 flex items-center justify-center p-4 z-50">
-                            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-xl font-semibold text-gray-900">Vault Settings</h2>
-                                    <button 
-                                        onClick={() => setIsSettingsOpen(false)}
-                                        className="text-gray-400 hover:text-gray-500"
-                                    >
-                                        <span className="sr-only">Close</span>
-                                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </button>
-                                </div>
-                                
-                                <div className="space-y-6">
-                                    <div className="divide-y divide-gray-200">
-                                        {/* Auto-lock settings */}
-                                        <div className="py-4">
-                                            <h3 className="text-lg font-medium text-gray-900 mb-2">Auto-Lock</h3>
-                                            <div className="flex items-center">
-                                                <label className="mr-3 text-sm text-gray-700">Lock vault after</label>
-                                                <select 
-                                                    value={autoLockTimeout}
-                                                    onChange={(e) => setAutoLockTimeout(parseInt(e.target.value))}
-                                                    className="block w-24 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
-                                                >
-                                                    <option value={1}>1 min</option>
-                                                    <option value={5}>5 min</option>
-                                                    <option value={15}>15 min</option>
-                                                    <option value={30}>30 min</option>
-                                                    <option value={60}>1 hour</option>
-                                                </select>
-                                                <span className="ml-3 text-sm text-gray-700">of inactivity</span>
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Master password */}
-                                        <div className="py-4">
-                                            <h3 className="text-lg font-medium text-gray-900 mb-2">Master Password</h3>
-                                            <p className="text-sm text-gray-500 mb-3">
-                                                Change the master password used to encrypt your vault data.
-                                            </p>
-                                            <button
-                                                onClick={() => {
-                                                    setIsSettingsOpen(false);
-                                                    setIsChangingPassword(true);
-                                                }}
-                                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-                                            >
-                                                Change Master Password
-                                            </button>
-                                        </div>
-                                        
-                                        {/* Export vault */}
-                                        <div className="py-4">
-                                            <h3 className="text-lg font-medium text-gray-900 mb-2">Export Vault</h3>
-                                            <p className="text-sm text-gray-500 mb-3">
-                                                Export your vault data as a decrypted JSON file.
-                                            </p>
-                                            <button
-                                                onClick={() => {
-                                                    if (!encryptionKey || !vault) return;
-                                                    
-                                                    // Create export data with decrypted passwords
-                                                    const exportData = {
-                                                        vault: {
-                                                            name: vault.name
-                                                        },
-                                                        passwords: Object.values(decryptedData)
-                                                    };
-                                                    
-                                                    // Create download link
-                                                    const dataStr = JSON.stringify(exportData, null, 2);
-                                                    const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
-                                                    
-                                                    const exportFileDefaultName = `${vault.name}-export.json`;
-                                                    
-                                                    const linkElement = document.createElement('a');
-                                                    linkElement.setAttribute('href', dataUri);
-                                                    linkElement.setAttribute('download', exportFileDefaultName);
-                                                    linkElement.click();
-                                                }}
-                                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-                                                disabled={!encryptionKey}
-                                            >
-                                                Export Vault
-                                            </button>
-                                        </div>
-
-                                        {/* Delete vault */}
-                                        <div className="py-4">
-                                            <h3 className="text-lg font-medium text-gray-900 mb-2">Delete Vault</h3>
-                                            <p className="text-sm text-gray-500 mb-3">
-                                                Permanently delete this vault and all its passwords. This action cannot be undone.
-                                            </p>
-                                            <button
-                                                onClick={() => {
-                                                    setIsSettingsOpen(false);
-                                                    handleDeleteVault();
-                                                }}
-                                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
-                                            >
-                                                Delete Vault
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    
-                    {/* Change Password Modal */}
-                    {isChangingPassword && (
-                        <div className="fixed inset-0 backdrop-blur-sm bg-gray-500/50 flex items-center justify-center p-4 z-50">
-                            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-                                <h2 className="text-xl font-semibold mb-4 text-gray-900">Change Master Password</h2>
-                                <form ref={changePasswordFormRef} onSubmit={handleChangeMasterPassword}>
-                                    {progress && (
-                                        <div className="mb-4 text-sm text-indigo-600 bg-indigo-50 p-3 rounded flex items-center">
-                                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-indigo-600 mr-2"></div>
-                                            {progress}
-                                        </div>
-                                    )}
-                                    {error && (
-                                        <div className="mb-4 text-sm text-red-600 bg-red-100 p-3 rounded">
-                                            {error}
-                                        </div>
-                                    )}
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700">
-                                                Current Password
-                                            </label>
-                                            <PasswordInput
-                                                value={changePasswordFormData.currentPassword}
-                                                onChange={(e) => setChangePasswordFormData(prev => ({
-                                                    ...prev,
-                                                    currentPassword: e.target.value
-                                                }))}
-                                                required
-                                                disabled={isProcessing}
-                                                className="mt-1"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700">
-                                                New Password
-                                            </label>
-                                            <PasswordInput
-                                                value={changePasswordFormData.newPassword}
-                                                onChange={(e) => setChangePasswordFormData(prev => ({
-                                                    ...prev,
-                                                    newPassword: e.target.value
-                                                }))}
-                                                required
-                                                disabled={isProcessing}
-                                                className="mt-1"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700">
-                                                Confirm New Password
-                                            </label>
-                                            <PasswordInput
-                                                value={changePasswordFormData.confirmPassword}
-                                                onChange={(e) => setChangePasswordFormData(prev => ({
-                                                    ...prev,
-                                                    confirmPassword: e.target.value
-                                                }))}
-                                                required
-                                                disabled={isProcessing}
-                                                className="mt-1"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="mt-6 flex justify-end space-x-3">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setIsChangingPassword(false);
-                                                setChangePasswordFormData({
-                                                    currentPassword: '',
-                                                    newPassword: '',
-                                                    confirmPassword: '',
-                                                });
-                                                setError('');
-                                            }}
-                                            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                                            disabled={isProcessing}
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
-                                            disabled={isProcessing}
-                                        >
-                                            {isProcessing ? (
-                                                <div className="flex items-center">
-                                                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                                                    Updating...
-                                                </div>
-                                            ) : (
-                                                'Update Password'
-                                            )}
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="flex bg-white shadow-sm rounded-lg overflow-hidden">
-                        {/* Password List - 1/3 width */}
-                        <div className="w-1/4 border-r border-gray-200">
-                            <div className="px-4 py-5">
-                                <h2 className="text-lg font-medium text-gray-900">Passwords</h2>
-                                <div className="mt-2">
-                                    <div className="relative rounded-md shadow-sm">
-                                        <input
-                                            type="text"
-                                            placeholder="Search passwords..."
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="block w-full border border-gray-300 rounded-md py-2 pl-3 pr-10 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"
-                                        />
-                                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                            </svg>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <ul className="divide-y divide-gray-200 max-h-[calc(100vh-16rem)] overflow-y-auto">
-                                {passwords.filter(password => {
-                                    if (!searchQuery) return true;
-                                    const query = searchQuery.toLowerCase();
-                                    const data = decryptedData[password.id];
-                                    if (!data) return false;
+                    {isSettingsOpen ? (
+                        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+                            <VaultSettings
+                                vaultName={vault?.name || ''}
+                                onDeleteVault={handleDeleteVault}
+                                onChangeMasterPassword={() => setIsChangingPassword(true)}
+                                onExportVault={() => {
+                                    if (!encryptionKey || !vault) return;
                                     
-                                    // Search in title, username, notes
-                                    return (
-                                        (data.siteMeta?.title || '').toLowerCase().includes(query) ||
-                                        (data.username || '').toLowerCase().includes(query) ||
-                                        (data.notes || '').toLowerCase().includes(query)
-                                    );
-                                }).map((password) => (
-                                    <li 
-                                        key={password.id}
-                                        className={`px-6 py-4 cursor-pointer hover:bg-gray-50 ${
-                                            selectedPassword === password.id ? 'bg-indigo-50' : ''
-                                        }`}
-                                        onClick={() => {
-                                            // Clean up any existing globe icons before decrypting
-                                            cleanupGlobeIcons();
-                                            decryptPassword(password);
-                                        }}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex-grow min-w-0">
-                                                {decryptedData[password.id] ? (
-                                                    <div className="space-y-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-4 h-4 flex-shrink-0">
-                                                                {decryptedData[password.id]?.siteMeta?.iconPath ? (
-                                                                    <img 
-                                                                        src={`${getApiBaseUrl()}${decryptedData[password.id]?.siteMeta?.iconPath}`}
-                                                                        alt=""
-                                                                        className="w-4 h-4"
-                                                                        onLoad={(e) => {
-                                                                            // Remove any existing globe icons when the actual icon loads
-                                                                            const parent = e.currentTarget.parentNode;
-                                                                            if (parent) {
-                                                                                const existingGlobeIcons = parent.querySelectorAll('img[src="/globe.svg"]');
-                                                                                existingGlobeIcons.forEach(icon => icon.remove());
-                                                                            }
-                                                                            e.currentTarget.style.display = 'block';
-                                                                        }}
-                                                                        onError={(e) => {
-                                                                            // Remove any existing globe icons
-                                                                            const parent = e.currentTarget.parentNode;
-                                                                            if (parent) {
-                                                                                const existingGlobeIcons = parent.querySelectorAll('img[src="/globe.svg"]');
-                                                                                existingGlobeIcons.forEach(icon => icon.remove());
-                                                                            }
-                                                                            e.currentTarget.style.display = 'none';
-                                                                            // Add new globe icon
-                                                                            const globeIcon = document.createElement('img');
-                                                                            globeIcon.src = '/globe.svg';
-                                                                            globeIcon.className = 'w-4 h-4';
-                                                                            parent?.appendChild(globeIcon);
-                                                                        }}
-                                                                    />
-                                                                ) : (
-                                                                    <img 
-                                                                        src="/globe.svg" 
-                                                                        alt="" 
-                                                                        className="w-4 h-4"
-                                                                    />
-                                                                )}
-                                                            </div>
-                                                            <span className="font-medium truncate text-gray-900">
-                                                                {decryptedData[password.id]?.siteMeta?.title || "Unknown website"}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-sm text-gray-600 truncate pl-6">
-                                                            {decryptedData[password.id]?.username}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="animate-pulse flex space-x-2 items-center w-full">
-                                                            <div className="rounded-full bg-gray-200 h-4 w-4"></div>
-                                                            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                            {passwords.length === 0 && (
-                                <div className="text-center py-12">
-                                    <h3 className="text-lg font-medium text-gray-900">No passwords yet</h3>
-                                    <p className="mt-1 text-sm text-gray-500">
-                                        Add your first password to get started
-                                    </p>
-                                </div>
-                            )}
+                                    const exportData = {
+                                        vault: {
+                                            name: vault.name
+                                        },
+                                        passwords: Object.values(decryptedData)
+                                    };
+                                    
+                                    const dataStr = JSON.stringify(exportData, null, 2);
+                                    const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
+                                    const exportFileDefaultName = `${vault.name}-export.json`;
+                                    
+                                    const linkElement = document.createElement('a');
+                                    linkElement.setAttribute('href', dataUri);
+                                    linkElement.setAttribute('download', exportFileDefaultName);
+                                    linkElement.click();
+                                }}
+                                canExport={!!encryptionKey}
+                            />
                         </div>
+                    ) : (
+                        <div className="flex bg-white shadow-sm rounded-lg overflow-hidden">
+                            <PasswordList 
+                                passwords={passwords}
+                                decryptedData={decryptedData}
+                                selectedPassword={selectedPassword}
+                                searchQuery={searchQuery}
+                                onSearchChange={setSearchQuery}
+                                onDecryptPassword={decryptPassword}
+                                onCreate={() => {
+                                    setIsCreating(true);
+                                    setIsEditing(false);
+                                    setSelectedPassword(null);
+                                    setSelectedDecryptedData(null);
+                                }}
+                            />
+                            <PasswordSection
+                                selectedPassword={selectedPassword}
+                                selectedDecryptedData={selectedDecryptedData}
+                                isCreating={isCreating}
+                                isEditing={isEditing}
+                                passwords={passwords}
+                                onCancel={() => {
+                                    setIsCreating(false);
+                                    setIsEditing(false);
+                                    if (!selectedDecryptedData) {
+                                        setSelectedPassword(null);
+                                    }
+                                }}
+                                onSave={handleSavePassword}
+                                onEdit={() => setIsEditing(true)}
+                                onDelete={handleDeletePassword}
+                            />
+                        </div>
+                    )}
 
-                        {/* Password Details/Form - 2/3 width */}
-                        <div className="w-3/4">
-                            <div className="px-6 py-5">
-                                <h2 className="text-lg font-medium text-gray-900">
-                                    {isCreating ? 'New Password' : 
-                                     selectedPassword ? (isEditing ? 'Edit Password' : 'Password Details') : 
-                                     'Select a password'}
-                                </h2>
-                            </div>
-                            <div className="px-6 py-5">
-                                {isCreating || isEditing ? (
-                                    <PasswordForm
-                                        initialData={selectedDecryptedData || undefined}
-                                        onSave={handleSavePassword}
-                                        onCancel={() => {
-                                            setIsCreating(false);
-                                            setIsEditing(false);
-                                            if (!selectedDecryptedData) {
-                                                setSelectedPassword(null);
-                                            }
-                                        }}
-                                    />
-                                ) : selectedDecryptedData ? (
-                                    <PasswordView
-                                        data={selectedDecryptedData}
-                                        onEdit={() => setIsEditing(true)}
-                                        onDelete={() => handleDeletePassword(selectedDecryptedData.id!)}
-                                    />
-                                ) : (
-                                    <div className="text-center py-12 text-gray-900">
-                                        {passwords.length > 0 
-                                            ? 'Select a password to view its details'
-                                            : 'Add your first password to get started'}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
+                    <ChangePasswordModal 
+                        isOpen={isChangingPassword}
+                        isProcessing={isProcessing}
+                        error={error}
+                        progress={progress}
+                        formData={changePasswordFormData}
+                        onClose={() => {
+                            setIsChangingPassword(false);
+                            setChangePasswordFormData({
+                                currentPassword: '',
+                                newPassword: '',
+                                confirmPassword: '',
+                            });
+                            setError('');
+                        }}
+                        onSubmit={handleChangeMasterPassword}
+                        onChange={(field, value) => 
+                            setChangePasswordFormData(prev => ({
+                                ...prev,
+                                [field]: value
+                            }))
+                        }
+                    />
                 </div>
             </div>
         </div>

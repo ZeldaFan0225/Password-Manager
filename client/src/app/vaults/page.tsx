@@ -188,9 +188,20 @@ export default function VaultsPage() {
                     )}
 
                     {modal.isOpen && (
-                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-                            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                                <h2 className="text-xl font-bold mb-4">Create New Vault</h2>
+                        <div className="fixed inset-0 backdrop-blur-sm bg-gray-500/50 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-semibold text-gray-900">Create New Vault</h2>
+                                    <button 
+                                        onClick={handleCloseModal}
+                                        className="text-gray-400 hover:text-gray-500"
+                                    >
+                                        <span className="sr-only">Close</span>
+                                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
                                 {progress && (
                                     <div className="mb-4 text-sm text-indigo-600 bg-indigo-50 p-3 rounded flex items-center">
                                         <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-indigo-600 mr-2"></div>
