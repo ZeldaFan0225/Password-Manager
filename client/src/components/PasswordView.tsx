@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import PasswordInput from './PasswordInput';
+import TotpCode from './TotpCode';
 import { DecryptedPassword } from './PasswordForm';
 import { getApiBaseUrl } from '@/lib/config';
 
@@ -28,19 +30,36 @@ export default function PasswordView({ data, onEdit, onDelete }: PasswordViewPro
                 {data.siteMeta?.title && (
                     <div className="flex items-center gap-2">
                         {data.siteMeta.iconPath ? (
-                            <img 
-                                src={`${getApiBaseUrl()}${data.siteMeta.iconPath}`}
-                                alt="" 
-                                className="w-5 h-5"
-                                onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                    // Try to show the default globe icon
-                                    const globeIcon = document.createElement('img');
-                                    globeIcon.src = '/globe.svg';
-                                    globeIcon.className = 'w-5 h-5';
-                                    e.currentTarget.parentNode?.insertBefore(globeIcon, e.currentTarget);
-                                }}
-                            />
+                            <div className="w-5 h-5 flex-shrink-0">
+                                <img 
+                                    src={`${getApiBaseUrl()}${data.siteMeta.iconPath}`}
+                                    alt="" 
+                                    className="w-5 h-5"
+                                    onLoad={(e) => {
+                                        // Remove any existing globe icons when the actual icon loads
+                                        const parent = e.currentTarget.parentNode;
+                                        if (parent) {
+                                            const existingGlobeIcons = parent.querySelectorAll('img[src="/globe.svg"]');
+                                            existingGlobeIcons.forEach(icon => icon.remove());
+                                        }
+                                        e.currentTarget.style.display = 'block';
+                                    }}
+                                    onError={(e) => {
+                                        // Remove any existing globe icons
+                                        const parent = e.currentTarget.parentNode;
+                                        if (parent) {
+                                            const existingGlobeIcons = parent.querySelectorAll('img[src="/globe.svg"]');
+                                            existingGlobeIcons.forEach(icon => icon.remove());
+                                        }
+                                        e.currentTarget.style.display = 'none';
+                                        // Add new globe icon
+                                        const globeIcon = document.createElement('img');
+                                        globeIcon.src = '/globe.svg';
+                                        globeIcon.className = 'w-5 h-5';
+                                        parent?.appendChild(globeIcon);
+                                    }}
+                                />
+                            </div>
                         ) : (
                             <img 
                                 src="/globe.svg" 
@@ -86,30 +105,14 @@ export default function PasswordView({ data, onEdit, onDelete }: PasswordViewPro
             </div>
 
             {/* Password */}
-            <div>
-                <label className="block text-sm font-medium text-gray-900 mb-1">
-                    Password
-                </label>
-                <div className="flex items-center justify-between group bg-gray-50 px-3 py-2 rounded-md">
-                    <span className="text-gray-900 font-mono">
-                        {isPasswordVisible ? data.password : '••••••••••••'}
-                    </span>
-                    <div className="space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                            onClick={() => setIsPasswordVisible(!isPasswordVisible)}
-                            className="text-indigo-600 hover:text-indigo-900"
-                        >
-                            {isPasswordVisible ? 'Hide' : 'Show'}
-                        </button>
-                        <button
-                            onClick={() => copyToClipboard(data.password)}
-                            className="text-indigo-600 hover:text-indigo-900"
-                        >
-                            Copy
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <PasswordInput
+                label="Password"
+                value={data.password}
+                readOnly
+                showCopyButton
+                onCopy={copyToClipboard}
+                className="font-mono"
+            />
 
             {/* Base Domain (non-editable) */}
             {data.siteMeta?.baseDomain && (
@@ -159,7 +162,15 @@ export default function PasswordView({ data, onEdit, onDelete }: PasswordViewPro
                         Two-Factor Authentication
                     </label>
                     <div className="bg-gray-50 px-3 py-2 rounded-md">
-                        <div className="text-gray-900">TOTP Secret: {data.totpSecret}</div>
+                        <div>
+                            <span className="font-medium text-gray-900">Current Code:</span>
+                            <div className="mt-1">
+                                <TotpCode 
+                                    secret={data.totpSecret} 
+                                    onCopy={copyToClipboard}
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

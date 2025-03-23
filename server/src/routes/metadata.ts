@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 
 interface SiteMeta {
     title: string;
-    iconPath: string | null;
+    iconPath: string;
     baseDomain: string;
 }
 
@@ -28,40 +28,6 @@ function extractBaseDomain(url: string): string {
     } catch (err) {
         console.error('Failed to extract domain:', err);
         return url;
-    }
-}
-
-// Find icon URL from HTML
-async function findIconUrl(url: string): Promise<string | undefined> {
-    try {
-        const response = await fetch(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-        });
-        const html = await response.text();
-        const dom = new JSDOM(html);
-        const doc = dom.window.document;
-
-        // Look for icon links in order of preference
-        const iconLink = 
-            doc.querySelector('link[rel="icon"]') || 
-            doc.querySelector('link[rel="shortcut icon"]') ||
-            doc.querySelector('link[rel="apple-touch-icon"]') ||
-            doc.querySelector('link[rel="apple-touch-icon-precomposed"]');
-        
-        let iconPath = iconLink?.getAttribute('href');
-        
-        // If no icon found in link tags, use default favicon.ico
-        if (!iconPath) {
-            iconPath = '/favicon.ico';
-        }
-
-        // Resolve relative URLs to absolute
-        return new URL(iconPath, url).href;
-    } catch (err) {
-        console.error('Failed to find icon URL:', err);
-        return undefined;
     }
 }
 
@@ -103,10 +69,10 @@ async function fetchSiteMeta(url: string): Promise<SiteMeta | undefined> {
         } catch (fetchErr) {
             console.error('Failed to fetch website:', fetchErr);
             
-            // If we can't fetch the website, create metadata with domain-based title
+            // Even if we can't fetch the website, we can still get the favicon from Google
             return {
                 title: extractTitleFromDomain(baseDomain),
-                iconPath: null, // No icon available
+                iconPath: `/api/metadata/icon?domain=${encodeURIComponent(baseDomain)}`,
                 baseDomain
             };
         }
@@ -128,7 +94,7 @@ export async function metadataRoutes(server: FastifyInstance) {
                 200: Type.Object({
                     meta: Type.Optional(Type.Object({
                         title: Type.String(),
-                        iconPath: Type.Union([Type.String(), Type.Null()]),
+                        iconPath: Type.String(),
                         baseDomain: Type.String(),
                     })),
                 }),
@@ -144,7 +110,7 @@ export async function metadataRoutes(server: FastifyInstance) {
         }
     });
 
-    // Icon proxy endpoint - no authentication required
+    // Icon endpoint - proxies Google's favicon service with fallback to globe.svg
     server.get<RouteGenericFetchIcon>('/metadata/icon', {
         schema: {
             querystring: Type.Object({
@@ -153,56 +119,49 @@ export async function metadataRoutes(server: FastifyInstance) {
             security: [], // Empty security array means no authentication required
         },
     }, async (request, reply) => {
+        const { domain } = request.query;
+        const googleFaviconUrl = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${encodeURIComponent(domain)}&size=128`;
+        
         try {
-            const { domain } = request.query;
-            const url = `https://${domain}`;
+            const response = await fetch(googleFaviconUrl);
             
-            try {
-                // Find the icon URL
-                const iconUrl = await findIconUrl(url);
+            if (!response.ok) {
+                // If Google's service fails, serve the fallback icon
+                const globeSvg = `<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>`;
                 
-                if (!iconUrl) {
-                    throw new Error('Icon URL not found');
-                }
-                
-                // Fetch the icon with timeout
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-                
-                const response = await fetch(iconUrl, { 
-                    signal: controller.signal,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                    }
-                });
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch icon: ${response.status}`);
-                }
-                
-                // Get content type
-                const contentType = response.headers.get('content-type') || 'image/x-icon';
-                
-                // Get icon data
-                const iconData = await response.arrayBuffer();
-                
-                // Send the icon with appropriate headers
                 reply
-                    .header('Content-Type', contentType)
+                    .header('Content-Type', 'image/svg+xml')
                     .header('Cache-Control', 'public, max-age=86400') // Cache for 24 hours
-                    .header('Access-Control-Allow-Origin', '*') // Allow cross-origin requests
-                    .header('Cross-Origin-Resource-Policy', 'cross-origin') // Allow cross-origin resource sharing
-                    .send(Buffer.from(iconData));
-            } catch (iconErr) {
-                server.log.error(`Error fetching icon for ${domain}:`, iconErr);
-                
-                // Return a 302 redirect to the default globe icon
-                reply.redirect('/globe.svg');
+                    .header('Cross-Origin-Resource-Policy', 'cross-origin')
+                    .header('Access-Control-Allow-Origin', '*')
+                    .header('Access-Control-Allow-Methods', 'GET')
+                    .send(globeSvg);
+                return;
             }
+            
+            const contentType = response.headers.get('content-type');
+            const iconData = await response.arrayBuffer();
+            
+            reply
+                .header('Content-Type', contentType)
+                .header('Cache-Control', 'public, max-age=86400') // Cache for 24 hours
+                .header('Cross-Origin-Resource-Policy', 'cross-origin')
+                .header('Access-Control-Allow-Origin', '*')
+                .header('Access-Control-Allow-Methods', 'GET')
+                .send(Buffer.from(iconData));
         } catch (err) {
-            server.log.error('Failed to process icon request:', err);
-            reply.redirect('/globe.svg');
+            server.log.error('Failed to fetch icon:', err);
+            
+            // For any error, serve the fallback icon
+            const globeSvg = `<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>`;
+            
+            reply
+                .header('Content-Type', 'image/svg+xml')
+                .header('Cache-Control', 'public, max-age=86400')
+                .header('Cross-Origin-Resource-Policy', 'cross-origin')
+                .header('Access-Control-Allow-Origin', '*')
+                .header('Access-Control-Allow-Methods', 'GET')
+                .send(globeSvg);
         }
     });
 }

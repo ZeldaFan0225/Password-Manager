@@ -1,8 +1,8 @@
 CREATE TABLE IF NOT EXISTS users (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     username VARCHAR(255) NOT NULL,
-    account_password_hash VARCHAR(1000) NOT NULL,
-    account_password_salt VARCHAR(1000) NOT NULL,
+    srp_salt VARCHAR(1000) NOT NULL,
+    srp_verifier VARCHAR(1000) NOT NULL,
     created_at timestamp DEFAULT CURRENT_TIMESTAMP
 );
 

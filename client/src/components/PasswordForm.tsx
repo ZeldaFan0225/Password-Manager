@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import PasswordInput from './PasswordInput';
+import { validateTotpSecret } from './TotpCode';
 import { getApiBaseUrl } from '@/lib/config';
 
 interface SiteMeta {
@@ -88,6 +90,8 @@ export default function PasswordForm({ initialData, onSave, onCancel }: Password
             notes: '',
         }
     );
+    
+    const [isTotpValid, setIsTotpValid] = useState<boolean | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -97,6 +101,17 @@ export default function PasswordForm({ initialData, onSave, onCancel }: Password
             if (!formData.website.trim()) {
                 alert('Website URL is required');
                 return;
+            }
+            
+            // Validate TOTP secret if provided
+            if (formData.totpSecret?.trim()) {
+                const isValid = validateTotpSecret(formData.totpSecret);
+                setIsTotpValid(isValid);
+                
+                if (!isValid) {
+                    alert('The TOTP secret is invalid. Please enter a valid Base32 secret or leave it empty.');
+                    return;
+                }
             }
             
             // Prepare clean data
@@ -146,18 +161,12 @@ export default function PasswordForm({ initialData, onSave, onCancel }: Password
                 />
             </div>
 
-            <div>
-                <label className="block text-sm font-medium text-gray-900">
-                    Password
-                </label>
-                <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="mt-1 block w-full rounded-md border border-gray-300 py-2 px-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    required
-                />
-            </div>
+            <PasswordInput
+                label="Password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+            />
 
             <div>
                 <label className="block text-sm font-medium text-gray-900">
@@ -166,10 +175,42 @@ export default function PasswordForm({ initialData, onSave, onCancel }: Password
                 <input
                     type="text"
                     value={formData.totpSecret || ''}
-                    onChange={(e) => setFormData({ ...formData, totpSecret: e.target.value })}
-                    className="mt-1 block w-full rounded-md border border-gray-300 py-2 px-3 text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    onChange={(e) => {
+                        const newValue = e.target.value;
+                        setFormData({ ...formData, totpSecret: newValue });
+                        
+                        // Validate TOTP secret if not empty
+                        if (newValue.trim()) {
+                            setIsTotpValid(validateTotpSecret(newValue));
+                        } else {
+                            setIsTotpValid(null);
+                        }
+                    }}
+                    className={`mt-1 block w-full rounded-md border ${
+                        isTotpValid === false 
+                            ? 'border-red-500' 
+                            : isTotpValid === true 
+                                ? 'border-green-500' 
+                                : 'border-gray-300'
+                    } py-2 px-3 text-gray-900 shadow-sm focus:outline-none focus:ring-1 ${
+                        isTotpValid === false 
+                            ? 'focus:ring-red-500 focus:border-red-500' 
+                            : isTotpValid === true 
+                                ? 'focus:ring-green-500 focus:border-green-500' 
+                                : 'focus:ring-indigo-500 focus:border-indigo-500'
+                    }`}
                     placeholder="Enter TOTP secret for 2FA"
                 />
+                {formData.totpSecret && isTotpValid === false && (
+                    <p className="mt-1 text-sm text-red-600">
+                        Invalid TOTP secret. Please enter a valid Base32 secret.
+                    </p>
+                )}
+                {formData.totpSecret && isTotpValid === true && (
+                    <p className="mt-1 text-sm text-green-600">
+                        Valid TOTP secret
+                    </p>
+                )}
             </div>
 
             <div>

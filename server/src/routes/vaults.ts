@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+ import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { User } from '../database/database';
 
@@ -51,6 +51,11 @@ interface RouteGenericAccess {
 }
 
 interface RouteGenericDeletePassword {
+    Params: { id: string; passwordId: string };
+}
+
+interface RouteGenericUpdatePassword {
+    Body: StorePasswordBody;
     Params: { id: string; passwordId: string };
 }
 
@@ -405,6 +410,59 @@ export async function vaultRoutes(server: FastifyInstance) {
             if (error instanceof Error && error.message === 'Only the owner can update master password') {
                 return reply.code(403).send({ error: error.message });
             }
+            return reply.code(500).send({ error: 'Internal Server Error' });
+        }
+    });
+
+    // Update an existing password
+    server.put<RouteGenericUpdatePassword>('/:id/passwords/:passwordId', {
+        schema: {
+            security: [{ bearerAuth: [] }],
+            params: Type.Object({
+                id: Type.String(),
+                passwordId: Type.String(),
+            }),
+            body: Type.Object({
+                encryptedData: Type.String(),
+                iv: Type.String(),
+            }),
+            response: {
+                200: Type.Object({
+                    success: Type.Boolean(),
+                }),
+            },
+        },
+    }, async (request, reply) => {
+        const vaultId = Number(request.params.id);
+        const passwordId = Number(request.params.passwordId);
+        const { encryptedData, iv } = request.body;
+        const user = request.user as User;
+
+        try {
+            // Verify vault access
+            const access = await server.db.getVaultAccess(vaultId, user.id);
+            if (!access) {
+                return reply.code(403).send({ error: 'Access denied' });
+            }
+
+            // Check if password exists and belongs to this vault
+            const passwords = await server.db.getVaultPasswords(vaultId);
+            const passwordExists = passwords.some(p => p.id === passwordId);
+            
+            if (!passwordExists) {
+                return reply.code(404).send({ error: 'Password not found' });
+            }
+
+            // Update the password
+            // We need to add this method to the database class
+            await server.db.updatePassword(passwordId, vaultId, {
+                data: Buffer.from(encryptedData, 'hex'),
+                iv,
+            });
+
+            return { success: true };
+        } catch (error) {
+            server.log.error(error);
             return reply.code(500).send({ error: 'Internal Server Error' });
         }
     });

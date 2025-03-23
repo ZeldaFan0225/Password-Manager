@@ -19,6 +19,45 @@ export function TopNav() {
     if (token) {
       fetchUser(token);
     }
+    
+    // Listen for storage events (when token is added/removed in another tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'token') {
+        if (e.newValue) {
+          fetchUser(e.newValue);
+        } else {
+          setUser(null);
+        }
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+  
+  // Add a function to refresh the user data that can be called after login/registration
+  useEffect(() => {
+    // Create a custom event that components can dispatch after login/registration
+    const handleAuthChange = () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        fetchUser(token);
+      } else {
+        setUser(null);
+      }
+    };
+    
+    window.addEventListener('auth-change', handleAuthChange);
+    
+    // Initial check
+    handleAuthChange();
+    
+    return () => {
+      window.removeEventListener('auth-change', handleAuthChange);
+    };
   }, []);
 
   async function fetchUser(token: string) {

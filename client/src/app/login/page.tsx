@@ -3,39 +3,126 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiBaseUrl } from '@/lib/config';
+import * as srp from 'secure-remote-password/client';
+import PasswordInput from '@/components/PasswordInput';
+// Note: We don't need to import crypto in the browser as it's available globally
+
+// Helper function to perform PBKDF2 derivation
+async function pbkdf2Derive(password: string, salt: string): Promise<string> {
+    // Use the Web Crypto API for PBKDF2
+    const encoder = new TextEncoder();
+    const passwordBuffer = encoder.encode(password);
+    const saltBuffer = encoder.encode(salt);
+    
+    // Import the password as a key
+    const baseKey = await crypto.subtle.importKey(
+        'raw',
+        passwordBuffer,
+        { name: 'PBKDF2' },
+        false,
+        ['deriveBits']
+    );
+    
+    // Derive bits using PBKDF2
+    const derivedBits = await crypto.subtle.deriveBits(
+        {
+            name: 'PBKDF2',
+            salt: saltBuffer,
+            iterations: 10000,
+            hash: 'SHA-256'
+        },
+        baseKey,
+        256 // 32 bytes (256 bits)
+    );
+    
+    // Convert to hex string
+    const derivedKey = Array.from(new Uint8Array(derivedBits))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    
+    return derivedKey;
+}
 
 export default function LoginPage() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
 
     async function handleSubmit(e: FormEvent) {
         e.preventDefault();
         setError('');
+        setIsLoading(true);
 
         try {
-            const response = await fetch(`${await getApiBaseUrl()}/auth/login`, {
+            // Step 1: Request SRP challenge from server
+            const challengeResponse = await fetch(`${await getApiBaseUrl()}/auth/srp-challenge`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify({ username }),
             });
 
-            const data = await response.json();
+            const challengeData = await challengeResponse.json();
 
-            if (!response.ok) {
-                throw new Error(data.error || 'Login failed');
+            if (!challengeResponse.ok) {
+                throw new Error(challengeData.error || 'Authentication failed');
             }
 
-            // Store the token in localStorage
-            localStorage.setItem('token', data.token);
+            const { salt, server_public_key } = challengeData;
 
-            // Redirect to vaults page
-            router.push('/vaults');
+            // Step 2: Strengthen password with PBKDF2
+            const strengthenedPassword = await pbkdf2Derive(password, salt);
+            
+            // Step 3: Generate client SRP values
+            const clientEphemeral = srp.generateEphemeral();
+            const clientSession = srp.deriveSession(
+                clientEphemeral.secret,
+                server_public_key,
+                salt,
+                username,
+                strengthenedPassword
+            );
+
+            // Step 4: Send proof to server
+            const loginResponse = await fetch(`${await getApiBaseUrl()}/auth/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username,
+                    client_public_key: clientEphemeral.public,
+                    client_proof: clientSession.proof,
+                }),
+            });
+
+            const loginData = await loginResponse.json();
+
+            if (!loginResponse.ok) {
+                throw new Error(loginData.error || 'Authentication failed');
+            }
+
+            // Step 5: Verify server proof
+            try {
+                srp.verifySession(clientEphemeral.public, clientSession, loginData.server_proof);
+                
+                // Authentication successful
+                localStorage.setItem('token', loginData.token);
+                
+                // Dispatch auth-change event to update the navbar
+                window.dispatchEvent(new Event('auth-change'));
+                
+                router.push('/vaults');
+            } catch (verifyError) {
+                throw new Error('Server verification failed');
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Login failed');
+        } finally {
+            setIsLoading(false);
         }
     }
 
@@ -67,21 +154,17 @@ export default function LoginPage() {
                                 placeholder="Username"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
+                                disabled={isLoading}
                             />
                         </div>
-                        <div>
-                            <label htmlFor="password" className="sr-only">
-                                Password
-                            </label>
-                            <input
-                                id="password"
-                                name="password"
-                                type="password"
-                                required
-                                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                                placeholder="Password"
+                        <div className="rounded-b-md overflow-hidden">
+                            <PasswordInput
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Password"
+                                required
+                                disabled={isLoading}
+                                className="border-t-0 rounded-none rounded-b-md"
                             />
                         </div>
                     </div>
@@ -90,8 +173,9 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            disabled={isLoading}
                         >
-                            Sign in
+                            {isLoading ? 'Signing in...' : 'Sign in'}
                         </button>
                     </div>
                 </form>

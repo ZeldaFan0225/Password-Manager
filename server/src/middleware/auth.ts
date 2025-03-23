@@ -1,5 +1,5 @@
-import { FastifyReply, FastifyRequest, FastifyInstance } from 'fastify';
 import crypto from 'crypto';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 // Authentication middleware
 export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
@@ -8,6 +8,7 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
         if (
             request.routeOptions.url?.includes('/auth/login') ||
             request.routeOptions.url?.includes('/auth/register') ||
+            request.routeOptions.url?.includes('/auth/srp-challenge') ||
             request.routeOptions.url?.includes('/documentation') ||
             request.routeOptions.url === '/' ||
             request.routeOptions.url?.includes('/health') ||

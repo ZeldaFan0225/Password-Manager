@@ -72,14 +72,14 @@ export class Database {
 
     public async createUser(userData: CreateUser): Promise<User> {
         const query = `
-            INSERT INTO users (username, account_password_hash, account_password_salt)
+            INSERT INTO users (username, srp_salt, srp_verifier)
             VALUES ($1, $2, $3)
             RETURNING *
         `;
         const result = await this.pool?.query(query, [
             userData.username,
-            userData.account_password_hash,
-            userData.account_password_salt,
+            userData.srp_salt,
+            userData.srp_verifier,
         ]);
         if (!result?.rows[0]) {
             throw new Error('Failed to create user');
@@ -260,6 +260,25 @@ export class Database {
         return result?.rowCount === 1;
     }
 
+    public async updatePassword(id: number, vaultId: number, data: {
+        data: Buffer;
+        iv: string;
+    }): Promise<boolean> {
+        const query = `
+            UPDATE passwords 
+            SET data = $1, iv = $2 
+            WHERE id = $3 AND vault_id = $4
+            RETURNING id
+        `;
+        const result = await this.pool?.query(query, [
+            data.data,
+            data.iv,
+            id,
+            vaultId
+        ]);
+        return result?.rowCount === 1;
+    }
+
     public async updateMasterPassword(vaultId: number, userId: number, data: {
         encryptedUserId: string;
         passwords: Array<{
@@ -329,15 +348,15 @@ export class Database {
 
 export interface CreateUser {
     username: string;
-    account_password_hash: string;
-    account_password_salt: string;
+    srp_salt: string;
+    srp_verifier: string;
 }
 
 export interface User {
     id: number;
     username: string;
-    account_password_hash: string;
-    account_password_salt: string;
+    srp_salt: string;
+    srp_verifier: string;
     created_at: Date;
 }
 
