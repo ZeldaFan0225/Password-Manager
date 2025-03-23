@@ -2,6 +2,91 @@ import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { JSDOM } from 'jsdom';
 
+// Dictionary of known services and their domains
+const KNOWN_SERVICES: Record<string, string> = {
+    // Social Media
+    'twitter.com': 'Twitter',
+    'x.com': 'Twitter',
+    'facebook.com': 'Facebook',
+    'instagram.com': 'Instagram',
+    'linkedin.com': 'LinkedIn',
+    'reddit.com': 'Reddit',
+    'discord.com': 'Discord',
+    'slack.com': 'Slack',
+    'telegram.org': 'Telegram',
+
+    // Email & Communication
+    'gmail.com': 'Gmail',
+    'outlook.com': 'Outlook',
+    'proton.me': 'Proton Mail',
+    'tutanota.com': 'Tutanota',
+    'zoom.us': 'Zoom',
+
+    // Cloud Services
+    'github.com': 'GitHub',
+    'gitlab.com': 'GitLab',
+    'bitbucket.org': 'Bitbucket',
+    'aws.amazon.com': 'Amazon AWS',
+    'cloud.google.com': 'Google Cloud',
+    'azure.microsoft.com': 'Microsoft Azure',
+    'digitalocean.com': 'DigitalOcean',
+    'heroku.com': 'Heroku',
+    'netlify.com': 'Netlify',
+    'vercel.com': 'Vercel',
+
+    // Crypto & Finance
+    'binance.com': 'Binance',
+    'coinbase.com': 'Coinbase',
+    'kraken.com': 'Kraken',
+    'paypal.com': 'PayPal',
+    'wise.com': 'Wise',
+    'revolut.com': 'Revolut',
+
+    // Gaming
+    'steam.com': 'Steam',
+    'epicgames.com': 'Epic Games',
+    'battle.net': 'Battle.net',
+    'minecraft.net': 'Minecraft',
+    'xbox.com': 'Xbox',
+    'playstation.com': 'PlayStation',
+    'nintendo.com': 'Nintendo',
+
+    // Productivity & Storage
+    'dropbox.com': 'Dropbox',
+    'box.com': 'Box',
+    'notion.so': 'Notion',
+    'atlassian.com': 'Atlassian',
+    'jira.com': 'Jira',
+    'trello.com': 'Trello',
+    'asana.com': 'Asana',
+    'clickup.com': 'ClickUp',
+    'monday.com': 'Monday.com',
+
+    // Security & Identity
+    'bitwarden.com': 'Bitwarden',
+    '1password.com': '1Password',
+    'lastpass.com': 'LastPass',
+    'dashlane.com': 'Dashlane',
+    'authy.com': 'Authy',
+
+    // Shopping & Entertainment
+    'amazon.com': 'Amazon',
+    'netflix.com': 'Netflix',
+    'spotify.com': 'Spotify',
+    'apple.com': 'Apple',
+    'ebay.com': 'eBay',
+    'microsoft.com': 'Microsoft',
+    'adobe.com': 'Adobe',
+
+    // Web Hosting & Domains
+    'cloudflare.com': 'Cloudflare',
+    'godaddy.com': 'GoDaddy',
+    'namecheap.com': 'Namecheap',
+    'wordpress.com': 'WordPress',
+    'shopify.com': 'Shopify',
+    'wix.com': 'Wix'
+};
+
 interface SiteMeta {
     title: string;
     iconPath: string;
@@ -31,51 +116,72 @@ function extractBaseDomain(url: string): string {
     }
 }
 
-// Extract title from domain (e.g., "google.com" -> "Google")
-function extractTitleFromDomain(domain: string): string {
-    // Remove TLD and split by dots or dashes
-    const parts = domain.split('.')[0]?.split(/[-_.]/) || ['unknown'];
-    
-    // Capitalize first letter of each part
-    return parts.map(part => 
-        part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+// Format domain name into a readable title
+function formatDomainToTitle(domain: string): string {
+    const basePart = domain.split('.')[0] || 'unknown';
+    const words = basePart.split(/[-_]/);
+    return words.map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     ).join(' ');
+}
+
+// Extract title from domain using known services dictionary or domain formatting
+function extractTitleFromDomain(domain: string): string {
+    // Check for known services first
+    const knownService = KNOWN_SERVICES[domain];
+    if (knownService) {
+        return knownService;
+    }
+
+    // For subdomains of known services (e.g., pages.github.com)
+    const parts = domain.split('.');
+    if (parts.length > 2) {
+        const parentDomain = parts.slice(-2).join('.');
+        if (KNOWN_SERVICES[parentDomain]) {
+            return KNOWN_SERVICES[parentDomain];
+        }
+    }
+
+    return formatDomainToTitle(domain);
 }
 
 // Fetch site metadata
 async function fetchSiteMeta(url: string): Promise<SiteMeta | undefined> {
     try {
-        // Extract base domain first
+        // Extract base domain
         const baseDomain = extractBaseDomain(url);
+        const iconPath = `/api/metadata/icon?domain=${encodeURIComponent(baseDomain)}`;
         
-        // Try to fetch the website
-        try {
-            const response = await fetch(url);
-            const html = await response.text();
-            const dom = new JSDOM(html);
-            const doc = dom.window.document;
+        // First check known services
+        const knownTitle = extractTitleFromDomain(baseDomain);
 
-            // Get title
-            const title = doc.querySelector('title')?.textContent?.trim() || '';
-            
-            // For icon, we'll use our proxy endpoint
-            const iconPath = `/api/metadata/icon?domain=${encodeURIComponent(baseDomain)}`;
-
-            return {
-                title: title || extractTitleFromDomain(baseDomain),
-                iconPath,
-                baseDomain
-            };
-        } catch (fetchErr) {
-            console.error('Failed to fetch website:', fetchErr);
-            
-            // Even if we can't fetch the website, we can still get the favicon from Google
-            return {
-                title: extractTitleFromDomain(baseDomain),
-                iconPath: `/api/metadata/icon?domain=${encodeURIComponent(baseDomain)}`,
-                baseDomain
-            };
+        // Try to fetch the website for title if not a known service
+        if (!KNOWN_SERVICES[baseDomain]) {
+            try {
+                const response = await fetch(url);
+                const html = await response.text();
+                const dom = new JSDOM(html);
+                const doc = dom.window.document;
+                const pageTitle = doc.querySelector('title')?.textContent?.trim();
+                
+                if (pageTitle) {
+                    return {
+                        title: pageTitle,
+                        iconPath,
+                        baseDomain
+                    };
+                }
+            } catch (fetchErr) {
+                console.error('Failed to fetch website:', fetchErr);
+            }
         }
+
+        // Fallback to known service name or formatted domain
+        return {
+            title: knownTitle,
+            iconPath,
+            baseDomain
+        };
     } catch (err) {
         console.error('Failed to process site metadata:', err);
         return undefined;
