@@ -1,5 +1,8 @@
 # Secure Password Manager
 
+**DISCLAIMER: THIS IS ONLY A PROOF OF CONCEPT APPLICATION AND SHOULD NOT BE USED AS AN ACTUAL PASSWORD MANAGER. NONE OF THE CONTRIBUTORS ARE LIABLE FOR ANY DAMAGES DUE TO THE USE OF THIS SOFTWARE**  
+Feel free to check the code and point out any possible vulnerabilities or problems. I'm always happy to learn.  
+  
 A full-stack, secure password manager application with client-side encryption, vault management, and password organization.
 
 ## Features
