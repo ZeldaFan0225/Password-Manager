@@ -26,6 +26,8 @@ This password manager implements a zero-knowledge security model:
 - **Verification**: Encrypted user ID used to verify correct master password
 - **Session Management**: JWT-based authentication with secure cookie storage
 
+![Encrypting data](./encryption.png)
+
 ## Tech Stack
 
 ### Frontend
