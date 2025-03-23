@@ -17,14 +17,14 @@ export function validateTotpSecret(secret: string): boolean {
         // If the secret is invalid, this will throw an error
         authenticator.generate(cleanSecret);
         return true;
-    } catch (error) {
+    } catch {
         return false;
     }
 }
 
 export default function TotpCode({ secret, onCopy }: TotpCodeProps) {
     const [code, setCode] = useState<string>('');
-    const [timeRemaining, setTimeRemaining] = useState<number>(30);
+    const [, setTimeRemaining] = useState<number>(30);
     const [isValid, setIsValid] = useState<boolean>(false);
     const [isCopied, setIsCopied] = useState(false);
     

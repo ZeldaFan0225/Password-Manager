@@ -288,7 +288,7 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                 setDecryptedData(decryptedPasswords);
                 
                 if (isEditing && data.id) {
-                    const updatedPassword = newPasswords.find((p: any) => p.id === data.id);
+                    const updatedPassword = newPasswords.find((p: {id: number}) => p.id === data.id);
                     if (updatedPassword) {
                         decryptPassword(updatedPassword);
                     }

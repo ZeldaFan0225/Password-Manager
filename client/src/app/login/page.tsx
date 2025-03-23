@@ -117,7 +117,7 @@ export default function LoginPage() {
                 window.dispatchEvent(new Event('auth-change'));
                 
                 router.push('/vaults');
-            } catch (verifyError) {
+            } catch {
                 throw new Error('Server verification failed');
             }
         } catch (err) {

@@ -1,9 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { getApiBaseUrl } from '@/lib/config';
-
 interface VaultSettingsProps {
     vaultName: string;
     onDeleteVault: () => Promise<void>;
@@ -12,8 +8,7 @@ interface VaultSettingsProps {
     canExport: boolean;
 }
 
-export default function VaultSettings({ 
-    vaultName,
+export default function VaultSettings({
     onDeleteVault,
     onChangeMasterPassword,
     onExportVault,

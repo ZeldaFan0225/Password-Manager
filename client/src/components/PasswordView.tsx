@@ -17,7 +17,6 @@ interface CopyState {
 }
 
 export default function PasswordView({ data, onEdit, onDelete }: PasswordViewProps) {
-    const [isPasswordVisible, setIsPasswordVisible] = useState(false);
     const [copiedStates, setCopiedStates] = useState<CopyState>({});
 
     const copyToClipboard = async (text: string, fieldId: string) => {
