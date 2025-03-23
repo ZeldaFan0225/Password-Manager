@@ -4,6 +4,11 @@ import * as srpServer from 'secure-remote-password/server';
 import { User } from '../database/database';
 import { generateSessionToken } from '../middleware/auth';
 
+// Constants for parameter validation
+const MAX_USERNAME_LENGTH = 255;
+const MAX_SALT_LENGTH = 1000;
+const MAX_VERIFIER_LENGTH = 1000;
+
 // SRP session storage (in-memory for simplicity)
 // In production, this should be stored in Redis or another distributed cache
 const srpSessions: Record<string, {
@@ -11,6 +16,12 @@ const srpSessions: Record<string, {
     serverPrivateKey: string;
     userId: number;
 }> = {};
+
+// Schema validation functions
+function isValidLength(str: string, maxLength: number): boolean {
+    const byteLength = Buffer.from(str).length;
+    return byteLength <= maxLength;
+}
 
 interface RegisterBody {
     username: string;
@@ -22,20 +33,10 @@ interface SrpChallengeBody {
     username: string;
 }
 
-interface SrpChallengeResponse {
-    salt: string;
-    server_public_key: string;
-}
-
 interface LoginBody {
     username: string;
     client_public_key: string;
     client_proof: string;
-}
-
-interface LoginResponse {
-    server_proof: string;
-    token: string;
 }
 
 interface RouteGenericRegister {
@@ -70,6 +71,17 @@ export async function userRoutes(server: FastifyInstance) {
         const { username, srp_salt, srp_verifier } = request.body;
 
         try {
+            // Validate input lengths
+            if (!isValidLength(username, MAX_USERNAME_LENGTH)) {
+                return reply.code(400).send({ error: 'Username too long' });
+            }
+            if (!isValidLength(srp_salt, MAX_SALT_LENGTH)) {
+                return reply.code(400).send({ error: 'Salt too long' });
+            }
+            if (!isValidLength(srp_verifier, MAX_VERIFIER_LENGTH)) {
+                return reply.code(400).send({ error: 'Verifier too long' });
+            }
+
             // Check if user exists
             const existingUser = await server.db.getUserByUsername(username);
             if (existingUser) {
@@ -114,14 +126,19 @@ export async function userRoutes(server: FastifyInstance) {
         const { username } = request.body;
 
         try {
+            // Validate input length
+            if (!isValidLength(username, MAX_USERNAME_LENGTH)) {
+                return reply.code(400).send({ error: 'Username too long' });
+            }
+
             // Get user
             const user = await server.db.getUserByUsername(username);
             if (!user) {
                 return reply.code(401).send({ error: 'Invalid credentials' });
             }
 
-            // Generate server SRP values
-            const serverEphemeral = srpServer.generateEphemeral(user.srp_verifier);
+            // Generate server SRP values asynchronously
+            const serverEphemeral = await Promise.resolve(srpServer.generateEphemeral(user.srp_verifier));
 
             // Store server values for the second step
             srpSessions[username] = {
@@ -160,6 +177,17 @@ export async function userRoutes(server: FastifyInstance) {
         const { username, client_public_key, client_proof } = request.body;
 
         try {
+            // Validate input lengths
+            if (!isValidLength(username, MAX_USERNAME_LENGTH)) {
+                return reply.code(400).send({ error: 'Username too long' });
+            }
+            if (!isValidLength(client_public_key, MAX_VERIFIER_LENGTH)) {
+                return reply.code(400).send({ error: 'Client public key too long' });
+            }
+            if (!isValidLength(client_proof, MAX_VERIFIER_LENGTH)) {
+                return reply.code(400).send({ error: 'Client proof too long' });
+            }
+
             // Get user
             const user = await server.db.getUserByUsername(username);
             if (!user) {
@@ -173,15 +201,15 @@ export async function userRoutes(server: FastifyInstance) {
             }
 
             try {
-                // Verify client proof
-                const serverSession = srpServer.deriveSession(
+                // Verify client proof asynchronously
+                const serverSession = await Promise.resolve(srpServer.deriveSession(
                     session.serverPrivateKey,
                     client_public_key,
                     user.srp_salt,
                     username,
                     user.srp_verifier,
                     client_proof
-                );
+                ));
 
                 // Generate and store session token
                 const token = generateSessionToken();

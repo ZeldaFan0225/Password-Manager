@@ -1,6 +1,28 @@
- import { FastifyInstance } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { User } from '../database/database';
+import { promisify } from 'util';
+
+// Constants for parameter validation
+const MAX_NAME_LENGTH = 255;
+const MAX_STR_LENGTH = 1000;
+const MAX_DATA_SIZE = 10 * 1024 * 1024; // 10MB limit for encrypted data
+
+// Convert Buffer operations to async
+const bufferFromAsync = promisify((data: string, encoding: BufferEncoding, cb: (err: Error | null, buffer: Buffer) => void) => {
+    try {
+        const buffer = Buffer.from(data, encoding);
+        cb(null, buffer);
+    } catch (err) {
+        cb(err as Error, Buffer.alloc(0));
+    }
+});
+
+// Validation functions
+function isValidLength(str: string, maxLength: number): boolean {
+    const byteLength = Buffer.from(str).length;
+    return byteLength <= maxLength;
+}
 
 interface CreateVaultBody {
     name?: string;
@@ -77,26 +99,42 @@ export async function vaultRoutes(server: FastifyInstance) {
                 }),
             },
         },
-    }, async (request) => {
-        // Generate salt for key derivation
-        const salt = request.body.salt;
+    }, async (request, reply) => {
+        const { salt, encryptedUserId } = request.body;
+        const name = request.body.name || `${(request.user as User).username}'s Vault`;
         const user = request.user as User;
-        
-        // Create vault with provided name or default
-        const vault = await server.db.createVault({
-            name: request.body.name || `${user.username}'s Vault`,
-            master_password_salt: salt,
-            encrypted_user_id: request.body.encryptedUserId,
-            user_id: user.id,
-            role: 'OWNER',
-        });
 
-        return {
-            id: vault.id,
-            name: vault.name,
-            salt: vault.master_password_salt,
-            encryptedUserId: vault.encrypted_user_id,
-        };
+        try {
+            // Validate input lengths
+            if (!isValidLength(name, MAX_NAME_LENGTH)) {
+                return reply.code(400).send({ error: 'Name too long' });
+            }
+            if (!isValidLength(salt, MAX_STR_LENGTH)) {
+                return reply.code(400).send({ error: 'Salt too long' });
+            }
+            if (!isValidLength(encryptedUserId, MAX_STR_LENGTH)) {
+                return reply.code(400).send({ error: 'Encrypted user ID too long' });
+            }
+
+            // Create vault with provided name or default
+            const vault = await server.db.createVault({
+                name: request.body.name || `${user.username}'s Vault`,
+                master_password_salt: salt,
+                encrypted_user_id: request.body.encryptedUserId,
+                user_id: user.id,
+                role: 'OWNER',
+            });
+
+            return {
+                id: vault.id,
+                name: vault.name,
+                salt: vault.master_password_salt,
+                encryptedUserId: vault.encrypted_user_id,
+            };
+        } catch (error) {
+            server.log.error(error);
+            return reply.code(500).send({ error: 'Internal Server Error' });
+        }
     });
 
     server.patch<RouteGenericUpdateVault>('/:id', {
@@ -169,16 +207,30 @@ export async function vaultRoutes(server: FastifyInstance) {
         const user = request.user as User;
 
         try {
+            // Validate input lengths
+            if (!isValidLength(iv, MAX_STR_LENGTH)) {
+                return reply.code(400).send({ error: 'IV too long' });
+            }
+            
+            // Validate encrypted data size
+            const dataSize = Buffer.from(encryptedData, 'hex').length;
+            if (dataSize > MAX_DATA_SIZE) {
+                return reply.code(400).send({ error: 'Encrypted data too large' });
+            }
+
             // Verify vault access
             const access = await server.db.getVaultAccess(vaultId, user.id);
             if (!access) {
                 return reply.code(403).send({ error: 'Access denied' });
             }
 
+            // Convert hex string to buffer asynchronously
+            const data = await bufferFromAsync(encryptedData, 'hex');
+
             // Store encrypted password
             const storedPassword = await server.db.createPassword({
                 vault_id: vaultId,
-                data: Buffer.from(encryptedData, 'hex'),
+                data,
                 iv,
             });
 
@@ -439,6 +491,17 @@ export async function vaultRoutes(server: FastifyInstance) {
         const user = request.user as User;
 
         try {
+            // Validate input lengths
+            if (!isValidLength(iv, MAX_STR_LENGTH)) {
+                return reply.code(400).send({ error: 'IV too long' });
+            }
+            
+            // Validate encrypted data size
+            const dataSize = Buffer.from(encryptedData, 'hex').length;
+            if (dataSize > MAX_DATA_SIZE) {
+                return reply.code(400).send({ error: 'Encrypted data too large' });
+            }
+
             // Verify vault access
             const access = await server.db.getVaultAccess(vaultId, user.id);
             if (!access) {
@@ -453,10 +516,12 @@ export async function vaultRoutes(server: FastifyInstance) {
                 return reply.code(404).send({ error: 'Password not found' });
             }
 
+            // Convert hex string to buffer asynchronously
+            const data = await bufferFromAsync(encryptedData, 'hex');
+
             // Update the password
-            // We need to add this method to the database class
             await server.db.updatePassword(passwordId, vaultId, {
-                data: Buffer.from(encryptedData, 'hex'),
+                data,
                 iv,
             });
 
