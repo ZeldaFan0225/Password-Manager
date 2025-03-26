@@ -34,6 +34,7 @@ export const config = {
     jwtSecret: getRequiredEnvVar("JWT_SECRET"),
     cookieSecret: getRequiredEnvVar("COOKIE_SECRET"),
     corsOrigin: process.env["CORS_ORIGIN"]?.split(',') || ['http://localhost:3000'],
+    prodDomain: process.env["PROD_DOMAIN"],
     isProduction: process.env["NODE_ENV"] === 'production',
     // Database config
     dbIp: getRequiredEnvVar("DB_IP"),

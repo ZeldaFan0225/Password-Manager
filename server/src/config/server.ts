@@ -74,10 +74,16 @@ export async function configureServer(server: FastifyInstance) {
                 version: '1.0.0',
             },
             servers: [
-                {
-                    url: 'http://127.0.0.1:3000',
-                    description: 'Development server',
-                },
+                (
+                    config.prodDomain && config.isProduction ?
+                        {
+                            "url": config.prodDomain,
+                            "description": "Production server"
+                        } : {
+                            url: 'http://127.0.0.1:3000',
+                            description: 'Development server',
+                        }
+                )
             ],
             components: {
                 securitySchemes: {
