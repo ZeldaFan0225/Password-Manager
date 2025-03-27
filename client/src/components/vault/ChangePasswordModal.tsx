@@ -2,6 +2,8 @@
 
 import { useRef } from 'react';
 import PasswordInput from '@/components/PasswordInput';
+import PasswordGenerator from '@/components/PasswordGenerator';
+import Modal from '@/components/Modal';
 
 interface ChangePasswordModalProps {
     isOpen: boolean;
@@ -30,23 +32,12 @@ export default function ChangePasswordModal({
 }: ChangePasswordModalProps) {
     const formRef = useRef<HTMLFormElement>(null);
 
-    if (!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 backdrop-blur-sm bg-gray-500/50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold text-gray-900">Change Master Password</h2>
-                    <button 
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-gray-500"
-                    >
-                        <span className="sr-only">Close</span>
-                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Change Master Password"
+        >
                 <form ref={formRef} onSubmit={onSubmit}>
                     {progress && (
                         <div className="mb-4 text-sm text-indigo-600 bg-indigo-50 p-3 rounded flex items-center">
@@ -72,7 +63,7 @@ export default function ChangePasswordModal({
                                 className="mt-1"
                             />
                         </div>
-                        <div>
+                        <div className="space-y-2">
                             <label className="block text-sm font-medium text-gray-700">
                                 New Password
                             </label>
@@ -83,6 +74,14 @@ export default function ChangePasswordModal({
                                 disabled={isProcessing}
                                 className="mt-1"
                             />
+                            <div className="mt-1">
+                                <PasswordGenerator 
+                                    onGenerate={(password) => {
+                                        onChange('newPassword', password);
+                                        onChange('confirmPassword', password);
+                                    }}
+                                />
+                            </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">
@@ -122,7 +121,6 @@ export default function ChangePasswordModal({
                         </button>
                     </div>
                 </form>
-            </div>
-        </div>
+        </Modal>
     );
 }

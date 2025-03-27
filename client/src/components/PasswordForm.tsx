@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import PasswordInput from './PasswordInput';
+import PasswordGenerator from './PasswordGenerator';
 import { validateTotpSecret } from './TotpCode';
 import { getApiBaseUrl } from '@/lib/config';
 
@@ -161,12 +162,19 @@ export default function PasswordForm({ initialData, onSave, onCancel }: Password
                 />
             </div>
 
-            <PasswordInput
-                label="Password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                required
-            />
+            <div className="space-y-2">
+                <PasswordInput
+                    label="Password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required
+                />
+                <div className="mt-1">
+                    <PasswordGenerator 
+                        onGenerate={(password) => setFormData({ ...formData, password })}
+                    />
+                </div>
+            </div>
 
             <div>
                 <label className="block text-sm font-medium text-gray-900">

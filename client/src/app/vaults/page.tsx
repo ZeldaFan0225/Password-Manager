@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getApiBaseUrl } from '@/lib/config';
 import crypto from 'crypto';
 import PasswordInput from '@/components/PasswordInput';
+import Modal from '@/components/Modal';
 
 interface Vault {
     id: number;
@@ -190,20 +191,11 @@ export default function VaultsPage() {
                     )}
 
                     {modal.isOpen && (
-                        <div className="fixed inset-0 backdrop-blur-sm bg-gray-500/50 flex items-center justify-center p-4 z-50">
-                            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-xl font-semibold text-gray-900">Create New Vault</h2>
-                                    <button 
-                                        onClick={handleCloseModal}
-                                        className="text-gray-400 hover:text-gray-500"
-                                    >
-                                        <span className="sr-only">Close</span>
-                                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </button>
-                                </div>
+                        <Modal
+                            isOpen={modal.isOpen}
+                            onClose={handleCloseModal}
+                            title="Create New Vault"
+                        >
                                 {progress && (
                                     <div className="mb-4 text-sm text-indigo-600 bg-indigo-50 p-3 rounded flex items-center">
                                         <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-indigo-600 mr-2"></div>
@@ -267,8 +259,7 @@ export default function VaultsPage() {
                                         </button>
                                     </div>
                                 </form>
-                            </div>
-                        </div>
+                        </Modal>
                     )}
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
