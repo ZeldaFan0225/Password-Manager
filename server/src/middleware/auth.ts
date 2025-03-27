@@ -8,6 +8,7 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
         if (
             request.routeOptions.url?.includes('/auth/login') ||
             request.routeOptions.url?.includes('/auth/register') ||
+            request.routeOptions.url?.includes('/auth/verify-2fa') ||
             request.routeOptions.url?.includes('/auth/srp-challenge') ||
             request.routeOptions.url?.includes('/documentation') ||
             request.routeOptions.url === '/' ||

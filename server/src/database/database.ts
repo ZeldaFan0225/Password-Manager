@@ -99,6 +99,68 @@ export class Database {
         return result?.rows[0];
     }
 
+    public async updateUsername(userId: number, username: string): Promise<User> {
+        // Check if username already exists
+        const existingUser = await this.getUserByUsername(username);
+        if (existingUser && existingUser.id !== userId) {
+            throw new Error('Username already exists');
+        }
+
+        const query = `
+            UPDATE users
+            SET username = $1
+            WHERE id = $2
+            RETURNING *
+        `;
+        const result = await this.pool?.query(query, [username, userId]);
+        if (!result?.rows[0]) {
+            throw new Error('Failed to update username');
+        }
+        return result.rows[0];
+    }
+
+    public async updateSrpCredentials(userId: number, srpSalt: string, srpVerifier: string): Promise<User> {
+        const query = `
+            UPDATE users
+            SET srp_salt = $1, srp_verifier = $2
+            WHERE id = $3
+            RETURNING *
+        `;
+        const result = await this.pool?.query(query, [srpSalt, srpVerifier, userId]);
+        if (!result?.rows[0]) {
+            throw new Error('Failed to update SRP credentials');
+        }
+        return result.rows[0];
+    }
+
+    public async setTotpSecret(userId: number, totpSecret: string): Promise<User> {
+        const query = `
+            UPDATE users
+            SET totp_secret = $1
+            WHERE id = $2
+            RETURNING *
+        `;
+        const result = await this.pool?.query(query, [totpSecret, userId]);
+        if (!result?.rows[0]) {
+            throw new Error('Failed to set TOTP secret');
+        }
+        return result.rows[0];
+    }
+
+    public async removeTotpSecret(userId: number): Promise<User> {
+        const query = `
+            UPDATE users
+            SET totp_secret = NULL
+            WHERE id = $1
+            RETURNING *
+        `;
+        const result = await this.pool?.query(query, [userId]);
+        if (!result?.rows[0]) {
+            throw new Error('Failed to remove TOTP secret');
+        }
+        return result.rows[0];
+    }
+
     /** Session Methods */
 
     public async getUserSession(token: string): Promise<Session | undefined> {
@@ -357,6 +419,7 @@ export interface User {
     username: string;
     srp_salt: string;
     srp_verifier: string;
+    totp_secret?: string;
     created_at: Date;
 }
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiBaseUrl } from '@/lib/config';
 import crypto from 'crypto';
+import PasswordInput from '@/components/PasswordInput';
 
 interface Vault {
     id: number;
@@ -109,6 +110,7 @@ export default function VaultsPage() {
             setProgress('Generating salt...');
             // Generate client-side salt for master password
             const salt = crypto.randomBytes(16).toString('hex');
+            await new Promise(resolve => setTimeout(resolve, 100)); // allow updating
             const key = deriveKey(modal.masterPassword, salt);
 
             // Get user ID from auth endpoint
@@ -232,14 +234,13 @@ export default function VaultsPage() {
                                         <label className="block text-gray-700 text-sm font-bold mb-2">
                                             Master Password
                                         </label>
-                                        <input
-                                            type="password"
+                                        <PasswordInput
                                             value={modal.masterPassword}
                                             onChange={(e) => setModal({ ...modal, masterPassword: e.target.value })}
                                             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
                                             required
                                             disabled={modal.isCreating}
-                                        />
+                                            />
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <button

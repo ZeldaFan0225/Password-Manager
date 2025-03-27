@@ -103,6 +103,12 @@ export function TopNav() {
             {user ? (
               <div className="flex items-center space-x-4">
                 <span className="text-white">{user.username}</span>
+                <Link
+                  href="/settings"
+                  className="text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  Settings
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium"

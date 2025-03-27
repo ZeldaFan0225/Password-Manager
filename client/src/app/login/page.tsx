@@ -49,10 +49,19 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [requires2FA, setRequires2FA] = useState(false);
+    const [totpCode, setTotpCode] = useState('');
+    const [tempToken, setTempToken] = useState('');
     const router = useRouter();
 
     async function handleSubmit(e: FormEvent) {
         e.preventDefault();
+        
+        if (requires2FA) {
+            await handle2FAVerification(e);
+            return;
+        }
+        
         setError('');
         setIsLoading(true);
 
@@ -110,6 +119,15 @@ export default function LoginPage() {
             try {
                 srp.verifySession(clientEphemeral.public, clientSession, loginData.server_proof);
                 
+                // Check if 2FA is required
+                if (loginData.requires_2fa) {
+                    // Save temporary token for 2FA verification
+                    setTempToken(loginData.temp_token);
+                    setRequires2FA(true);
+                    setIsLoading(false);
+                    return;
+                }
+                
                 // Authentication successful
                 localStorage.setItem('token', loginData.token);
                 
@@ -127,13 +145,59 @@ export default function LoginPage() {
         }
     }
 
+    async function handle2FAVerification(e: FormEvent) {
+        e.preventDefault();
+        setError('');
+        setIsLoading(true);
+
+        try {
+            if (!totpCode || totpCode.length !== 6) {
+                throw new Error('Please enter a valid 6-digit verification code');
+            }
+
+            const response = await fetch(`${await getApiBaseUrl()}/auth/verify-2fa`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    temp_token: tempToken,
+                    totp_code: totpCode
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Verification failed');
+            }
+
+            // 2FA verification successful
+            localStorage.setItem('token', data.token);
+            
+            // Dispatch auth-change event to update the navbar
+            window.dispatchEvent(new Event('auth-change'));
+            
+            router.push('/vaults');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Verification failed');
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-100">
             <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
                 <div>
                     <h2 className="text-center text-3xl font-bold text-gray-900">
-                        Sign in to your account
+                        {requires2FA ? 'Two-Factor Authentication' : 'Sign in to your account'}
                     </h2>
+                    {requires2FA && (
+                        <p className="mt-2 text-center text-sm text-gray-600">
+                            Please enter the verification code from your authenticator app
+                        </p>
+                    )}
                 </div>
                 <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
                     {error && (
@@ -141,34 +205,57 @@ export default function LoginPage() {
                             <div className="text-sm text-red-700">{error}</div>
                         </div>
                     )}
-                    <div className="rounded-md shadow-sm -space-y-px">
+                    
+                    {!requires2FA ? (
+                        <div className="rounded-md shadow-sm -space-y-px">
+                            <div>
+                                <label htmlFor="username" className="sr-only">
+                                    Username
+                                </label>
+                                <input
+                                    id="username"
+                                    name="username"
+                                    type="text"
+                                    required
+                                    className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                                    placeholder="Username"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    disabled={isLoading}
+                                />
+                            </div>
+                            <div className="rounded-b-md overflow-hidden">
+                                <PasswordInput
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="Password"
+                                    required
+                                    disabled={isLoading}
+                                    className="border-t-0 rounded-none rounded-b-md"
+                                />
+                            </div>
+                        </div>
+                    ) : (
                         <div>
-                            <label htmlFor="username" className="sr-only">
-                                Username
+                            <label htmlFor="totp-code" className="block text-sm font-medium text-gray-700">
+                                Verification Code
                             </label>
                             <input
-                                id="username"
-                                name="username"
+                                id="totp-code"
+                                name="totp-code"
                                 type="text"
                                 required
-                                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                                placeholder="Username"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
+                                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"
+                                placeholder="Enter 6-digit code"
+                                value={totpCode}
+                                onChange={(e) => setTotpCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
                                 disabled={isLoading}
+                                autoFocus
+                                pattern="[0-9]{6}"
+                                maxLength={6}
                             />
                         </div>
-                        <div className="rounded-b-md overflow-hidden">
-                            <PasswordInput
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Password"
-                                required
-                                disabled={isLoading}
-                                className="border-t-0 rounded-none rounded-b-md"
-                            />
-                        </div>
-                    </div>
+                    )}
 
                     <div>
                         <button
@@ -176,9 +263,29 @@ export default function LoginPage() {
                             className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                             disabled={isLoading}
                         >
-                            {isLoading ? 'Signing in...' : 'Sign in'}
+                            {isLoading 
+                                ? (requires2FA ? 'Verifying...' : 'Signing in...') 
+                                : (requires2FA ? 'Verify' : 'Sign in')}
                         </button>
                     </div>
+                    
+                    {requires2FA && (
+                        <div className="text-center">
+                            <button
+                                type="button"
+                                className="text-sm text-indigo-600 hover:text-indigo-500"
+                                onClick={() => {
+                                    setRequires2FA(false);
+                                    setTotpCode('');
+                                    setTempToken('');
+                                    setPassword('');
+                                }}
+                                disabled={isLoading}
+                            >
+                                Back to login
+                            </button>
+                        </div>
+                    )}
                 </form>
                 <Disclaimer />
             </div>

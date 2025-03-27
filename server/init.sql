@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(255) NOT NULL,
     srp_salt VARCHAR(1000) NOT NULL,
     srp_verifier VARCHAR(1000) NOT NULL,
+    totp_secret VARCHAR(255),
     created_at timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
