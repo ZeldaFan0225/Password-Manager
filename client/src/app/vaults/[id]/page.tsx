@@ -10,6 +10,7 @@ import PasswordList from '@/components/vault/PasswordList';
 import PasswordSection from '@/components/vault/PasswordSection';
 import VaultSettings from '@/components/vault/VaultSettings';
 import ChangePasswordModal from '@/components/vault/ChangePasswordModal';
+import UnlockVaultModal from '@/components/vault/UnlockVaultModal';
 
 interface EncryptedPassword {
     id: number;
@@ -588,203 +589,164 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
         }
     }, [isUnlocking, isSettingsOpen, handleLockVault]);
 
-    if (isUnlocking) {
-        return (
-            <div className="min-h-screen bg-gray-100 py-12">
-                <div className="max-w-md mx-auto bg-white rounded-lg shadow-lg overflow-hidden">
-                    <div className="px-6 py-8">
-                        <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Unlock Vault</h2>
-                        {vault && (
-                            <p className="text-gray-900 text-center mb-6">{vault.name}</p>
-                        )}
-                        {progress && (
-                            <div className="mb-4 text-sm text-indigo-600 bg-indigo-50 p-3 rounded flex items-center">
-                                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-indigo-600 mr-2"></div>
-                                {progress}
-                            </div>
-                        )}
-                        {error && (
-                            <div className="mb-4 text-sm text-red-600 bg-red-100 p-3 rounded">
-                                {error}
-                            </div>
-                        )}
-                        <form onSubmit={handleUnlock}>
-                            <div className="mb-6">
-                                <label className="block text-gray-900 text-sm font-bold mb-2">
-                                    Master Password
-                                </label>
-                                <PasswordInput
-                                    value={masterKey}
-                                    onChange={(e) => setMasterKey(e.target.value)}
-                                    className="mb-3"
-                                    required
-                                    disabled={isProcessing}
-                                />
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={isProcessing || !vault}
-                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center"
-                            >
-                                {isProcessing ? (
-                                    <>
-                                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                                        Unlocking...
-                                    </>
-                                ) : (
-                                    'Unlock'
-                                )}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <div className="min-h-[calc(100vh-64px)] bg-gray-100">
-            <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-                <div className="px-4 py-6 sm:px-0">
-                    <div className="flex justify-between items-center mb-6">
-                        <div>
-                            <h1 className="text-3xl font-bold text-gray-900">
-                                {vault?.name}
-                            </h1>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                            {!isSettingsOpen ? (
-                                <button
-                                    onClick={() => setIsSettingsOpen(true)}
-                                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-                                >
-                                    Settings
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={() => setIsSettingsOpen(false)}
-                                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600"
-                                >
-                                    Back to Passwords
-                                </button>
-                            )}
-                            <div className="relative">
-                                <button
-                                    onClick={handleLockVault}
-                                    className="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white overflow-hidden w-38"
-                                >
-                                    <div className="absolute inset-0 bg-yellow-600" style={{ zIndex: 0 }}></div>
-                                    <div 
-                                        className="absolute inset-0 bg-yellow-700 transition-transform duration-1000 ease-linear"
-                                        style={{ 
-                                            transform: `scaleX(${1 - timeLeft / (TIMEOUT_MINUTES * 60)})`,
-                                            transformOrigin: 'right',
-                                            zIndex: 1
-                                        }}
-                                    ></div>
-                                    <span className="relative" style={{ zIndex: 2 }}>
-                                        Lock Vault ({Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')})
-                                    </span>
-                                </button>
+        <div className={`min-h-[calc(100vh-64px)] ${isUnlocking ? 'bg-gray-100' : ''}`}>
+            <UnlockVaultModal
+                isOpen={isUnlocking}
+                vaultName={vault?.name || ''}
+                isProcessing={isProcessing}
+                error={error}
+                progress={progress}
+                onUnlock={handleUnlock}
+                onMasterKeyChange={setMasterKey}
+                masterKey={masterKey}
+            />
+            
+            {!isUnlocking && (
+                <div className="min-h-[calc(100vh-64px)] bg-gray-100">
+                    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                        <div className="px-4 py-6 sm:px-0">
+                            <div className="flex justify-between items-center mb-6">
+                                <div>
+                                    <h1 className="text-3xl font-bold text-gray-900">
+                                        {vault?.name}
+                                    </h1>
+                                </div>
+                                <div className="flex items-center space-x-3">
+                                    {!isSettingsOpen ? (
+                                        <button
+                                            onClick={() => setIsSettingsOpen(true)}
+                                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                                        >
+                                            Settings
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => setIsSettingsOpen(false)}
+                                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600"
+                                        >
+                                            Back to Passwords
+                                        </button>
+                                    )}
+                                    <div className="relative">
+                                        <button
+                                            onClick={handleLockVault}
+                                            className="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white overflow-hidden w-38"
+                                        >
+                                            <div className="absolute inset-0 bg-yellow-600" style={{ zIndex: 0 }}></div>
+                                            <div 
+                                                className="absolute inset-0 bg-yellow-700 transition-transform duration-1000 ease-linear"
+                                                style={{ 
+                                                    transform: `scaleX(${1 - timeLeft / (TIMEOUT_MINUTES * 60)})`,
+                                                    transformOrigin: 'right',
+                                                    zIndex: 1
+                                                }}
+                                            ></div>
+                                            <span className="relative" style={{ zIndex: 2 }}>
+                                                Lock Vault ({Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')})
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
+                            
+                            {error && (
+                                <div className="mb-4 text-sm text-red-600 bg-red-100 p-3 rounded">
+                                    {error}
+                                </div>
+                            )}
+
+                            {isSettingsOpen ? (
+                                <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+                                    <VaultSettings
+                                        vaultName={vault?.name || ''}
+                                        onDeleteVault={handleDeleteVault}
+                                        onChangeMasterPassword={() => setIsChangingPassword(true)}
+                                        onExportVault={() => {
+                                            if (!encryptionKey || !vault) return;
+                                            
+                                            const exportData = {
+                                                vault: {
+                                                    name: vault.name
+                                                },
+                                                passwords: Object.values(decryptedData)
+                                            };
+                                            
+                                            const dataStr = JSON.stringify(exportData, null, 2);
+                                            const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
+                                            const exportFileDefaultName = `${vault.name}-export.json`;
+                                            
+                                            const linkElement = document.createElement('a');
+                                            linkElement.setAttribute('href', dataUri);
+                                            linkElement.setAttribute('download', exportFileDefaultName);
+                                            linkElement.click();
+                                        }}
+                                        canExport={!!encryptionKey}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="flex bg-white shadow-sm rounded-lg overflow-hidden">
+                                    <PasswordList 
+                                        passwords={passwords}
+                                        decryptedData={decryptedData}
+                                        selectedPassword={selectedPassword}
+                                        searchQuery={searchQuery}
+                                        onSearchChange={setSearchQuery}
+                                        onDecryptPassword={decryptPassword}
+                                        onCreate={() => {
+                                            setIsCreating(true);
+                                            setIsEditing(false);
+                                            setSelectedPassword(null);
+                                            setSelectedDecryptedData(null);
+                                        }}
+                                    />
+                                    <PasswordSection
+                                        selectedPassword={selectedPassword}
+                                        selectedDecryptedData={selectedDecryptedData}
+                                        isCreating={isCreating}
+                                        isEditing={isEditing}
+                                        passwords={passwords}
+                                        onCancel={() => {
+                                            setIsCreating(false);
+                                            setIsEditing(false);
+                                            if (!selectedDecryptedData) {
+                                                setSelectedPassword(null);
+                                            }
+                                        }}
+                                        onSave={handleSavePassword}
+                                        onEdit={() => setIsEditing(true)}
+                                        onDelete={handleDeletePassword}
+                                    />
+                                </div>
+                            )}
+
+                            <ChangePasswordModal 
+                                isOpen={isChangingPassword}
+                                isProcessing={isProcessing}
+                                error={error}
+                                progress={progress}
+                                formData={changePasswordFormData}
+                                onClose={() => {
+                                    setIsChangingPassword(false);
+                                    setChangePasswordFormData({
+                                        currentPassword: '',
+                                        newPassword: '',
+                                        confirmPassword: '',
+                                    });
+                                    setError('');
+                                }}
+                                onSubmit={handleChangeMasterPassword}
+                                onChange={(field, value) => 
+                                    setChangePasswordFormData(prev => ({
+                                        ...prev,
+                                        [field]: value
+                                    }))
+                                }
+                            />
                         </div>
                     </div>
-                    
-                    {error && (
-                        <div className="mb-4 text-sm text-red-600 bg-red-100 p-3 rounded">
-                            {error}
-                        </div>
-                    )}
-
-                    {isSettingsOpen ? (
-                        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-                            <VaultSettings
-                                vaultName={vault?.name || ''}
-                                onDeleteVault={handleDeleteVault}
-                                onChangeMasterPassword={() => setIsChangingPassword(true)}
-                                onExportVault={() => {
-                                    if (!encryptionKey || !vault) return;
-                                    
-                                    const exportData = {
-                                        vault: {
-                                            name: vault.name
-                                        },
-                                        passwords: Object.values(decryptedData)
-                                    };
-                                    
-                                    const dataStr = JSON.stringify(exportData, null, 2);
-                                    const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
-                                    const exportFileDefaultName = `${vault.name}-export.json`;
-                                    
-                                    const linkElement = document.createElement('a');
-                                    linkElement.setAttribute('href', dataUri);
-                                    linkElement.setAttribute('download', exportFileDefaultName);
-                                    linkElement.click();
-                                }}
-                                canExport={!!encryptionKey}
-                            />
-                        </div>
-                    ) : (
-                        <div className="flex bg-white shadow-sm rounded-lg overflow-hidden">
-                            <PasswordList 
-                                passwords={passwords}
-                                decryptedData={decryptedData}
-                                selectedPassword={selectedPassword}
-                                searchQuery={searchQuery}
-                                onSearchChange={setSearchQuery}
-                                onDecryptPassword={decryptPassword}
-                                onCreate={() => {
-                                    setIsCreating(true);
-                                    setIsEditing(false);
-                                    setSelectedPassword(null);
-                                    setSelectedDecryptedData(null);
-                                }}
-                            />
-                            <PasswordSection
-                                selectedPassword={selectedPassword}
-                                selectedDecryptedData={selectedDecryptedData}
-                                isCreating={isCreating}
-                                isEditing={isEditing}
-                                passwords={passwords}
-                                onCancel={() => {
-                                    setIsCreating(false);
-                                    setIsEditing(false);
-                                    if (!selectedDecryptedData) {
-                                        setSelectedPassword(null);
-                                    }
-                                }}
-                                onSave={handleSavePassword}
-                                onEdit={() => setIsEditing(true)}
-                                onDelete={handleDeletePassword}
-                            />
-                        </div>
-                    )}
-
-                    <ChangePasswordModal 
-                        isOpen={isChangingPassword}
-                        isProcessing={isProcessing}
-                        error={error}
-                        progress={progress}
-                        formData={changePasswordFormData}
-                        onClose={() => {
-                            setIsChangingPassword(false);
-                            setChangePasswordFormData({
-                                currentPassword: '',
-                                newPassword: '',
-                                confirmPassword: '',
-                            });
-                            setError('');
-                        }}
-                        onSubmit={handleChangeMasterPassword}
-                        onChange={(field, value) => 
-                            setChangePasswordFormData(prev => ({
-                                ...prev,
-                                [field]: value
-                            }))
-                        }
-                    />
                 </div>
-            </div>
+            )}
         </div>
     );
 }
