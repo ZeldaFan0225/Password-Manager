@@ -72,11 +72,14 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
             const iv = Buffer.from(ivHex, 'hex');
             const encrypted = Buffer.from(encryptedHex, 'hex');
             
-            const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-            let decrypted = decipher.update(encrypted);
-            decrypted = Buffer.concat([decrypted, decipher.final()]);
-            
-            return decrypted.toString('utf8') === userId;
+            try {
+                const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+                const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+                return decrypted.toString('utf8') === userId;
+            } catch (err) {
+                // Silently return false for decryption failures
+                return false;
+            }
         } catch (err) {
             console.error('Error verifying user ID:', err);
             return false;
