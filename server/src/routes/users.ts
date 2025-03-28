@@ -5,6 +5,7 @@ import { User } from '../database/database';
 import { generateSessionToken } from '../middleware/auth';
 import { authenticator } from 'otplib';
 import crypto from 'crypto';
+import SuperMap from '@thunder04/supermap';
 
 // Constants for parameter validation
 const MAX_USERNAME_LENGTH = 255;
@@ -21,31 +22,15 @@ const srpSessions: Record<string, {
 
 // Temporary tokens for 2FA verification (in-memory for simplicity)
 // In production, this should be stored in Redis or another distributed cache
-const tempTokens: Record<string, {
-    userId: number;
-    expires: Date;
-}> = {};
+const tempTokens = new SuperMap<string, number>( {
+    intervalTime: 1000 * 60,
+    expireAfter: 1000 * 60 * 5, // 5 minutes
+})
 
 // Generate a temporary token for 2FA verification
 function generateTempToken(): string {
     return crypto.randomBytes(32).toString('hex');
 }
-
-// Clean up expired temporary tokens
-function cleanupTempTokens() {
-    const now = new Date();
-    for (const token in tempTokens) {
-        if (Object.prototype.hasOwnProperty.call(tempTokens, token)) {
-            const entry = tempTokens[token];
-            if (entry && entry.expires < now) {
-                delete tempTokens[token];
-            }
-        }
-    }
-}
-
-// Schedule cleanup every 5 minutes
-setInterval(cleanupTempTokens, 5 * 60 * 1000);
 
 // Schema validation functions
 function isValidLength(str: string, maxLength: number): boolean {
@@ -257,10 +242,7 @@ export async function userRoutes(server: FastifyInstance) {
                     const expiresAt = new Date();
                     expiresAt.setMinutes(expiresAt.getMinutes() + 5);
                     
-                    tempTokens[tempToken] = {
-                        userId: user.id,
-                        expires: expiresAt
-                    };
+                    tempTokens.set(tempToken, user.id)
                     
                     // Return server proof and temporary token
                     return {
@@ -308,27 +290,21 @@ export async function userRoutes(server: FastifyInstance) {
 
         try {
             // Check if temporary token exists and is valid
-            const tempTokenData = tempTokens[temp_token];
-            if (!tempTokenData) {
+            const tempTokenUserId = tempTokens.get(temp_token);
+            if (!tempTokenUserId) {
                 return reply.code(401).send({ error: 'Invalid or expired token' });
             }
 
-            // Check if token is expired
-            if (tempTokenData.expires < new Date()) {
-                delete tempTokens[temp_token];
-                return reply.code(401).send({ error: 'Token expired' });
-            }
-
             // Get user
-            const user = await server.db.getUser(tempTokenData.userId);
+            const user = await server.db.getUser(tempTokenUserId);
             if (!user) {
-                delete tempTokens[temp_token];
+                tempTokens.delete(temp_token);
                 return reply.code(401).send({ error: 'User not found' });
             }
 
             // Verify TOTP code
             if (!user.totp_secret) {
-                delete tempTokens[temp_token];
+                tempTokens.delete(temp_token);
                 return reply.code(400).send({ error: '2FA is not enabled for this user' });
             }
 
@@ -342,7 +318,7 @@ export async function userRoutes(server: FastifyInstance) {
             }
 
             // Clean up temporary token
-            delete tempTokens[temp_token];
+            tempTokens.delete(temp_token);
 
             // Generate and store session token
             const token = generateSessionToken();
