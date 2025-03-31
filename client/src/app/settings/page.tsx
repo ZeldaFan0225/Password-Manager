@@ -57,6 +57,19 @@ export default function SettingsPage() {
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+    // Sessions state
+    const [sessions, setSessions] = useState<Array<{
+        id: number;
+        created_at: string;
+        expires_at: string;
+        device_name: string;
+        ip_address: string;
+        is_current: boolean;
+    }>>([]);
+    const [loadingSessions, setLoadingSessions] = useState(false);
+    const [deletingSession, setDeletingSession] = useState<number | null>(null);
+    const [deletingAllSessions, setDeletingAllSessions] = useState(false);
+
     // Username update state
     const [newUsername, setNewUsername] = useState('');
     const [updatingUsername, setUpdatingUsername] = useState(false);
@@ -83,7 +96,106 @@ export default function SettingsPage() {
         }
 
         fetchUser(token);
+        fetchSessions(token);
     }, [router]);
+
+    async function fetchSessions(token: string) {
+        try {
+            setLoadingSessions(true);
+            const response = await fetch(`${getApiBaseUrl()}/auth/sessions`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    localStorage.removeItem('token');
+                    router.push('/login');
+                    return;
+                }
+                throw new Error('Failed to fetch sessions');
+            }
+
+            const data = await response.json();
+            setSessions(data);
+        } catch (error) {
+            console.error('Failed to fetch sessions:', error);
+            setError('Failed to load sessions');
+        } finally {
+            setLoadingSessions(false);
+        }
+    }
+
+    async function deleteSession(sessionId: number) {
+        try {
+            setDeletingSession(sessionId);
+            setError(null);
+            setSuccessMessage(null);
+
+            const token = localStorage.getItem('token');
+            if (!token) {
+                router.push('/login');
+                return;
+            }
+
+            const response = await fetch(`${getApiBaseUrl()}/auth/sessions/${sessionId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to delete session');
+            }
+
+            setSuccessMessage('Session terminated successfully');
+            fetchSessions(token); // Refresh sessions
+        } catch (error) {
+            console.error('Error deleting session:', error);
+            setError((error as Error).message || 'Failed to delete session');
+        } finally {
+            setDeletingSession(null);
+        }
+    }
+
+    async function deleteAllOtherSessions() {
+        try {
+            setDeletingAllSessions(true);
+            setError(null);
+            setSuccessMessage(null);
+
+            const token = localStorage.getItem('token');
+            if (!token) {
+                router.push('/login');
+                return;
+            }
+
+            const response = await fetch(`${getApiBaseUrl()}/auth/sessions`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to delete sessions');
+            }
+
+            const data = await response.json();
+            setSuccessMessage(`Successfully terminated ${data.count} sessions`);
+            fetchSessions(token); // Refresh sessions
+        } catch (error) {
+            console.error('Error deleting sessions:', error);
+            setError((error as Error).message || 'Failed to delete sessions');
+        } finally {
+            setDeletingAllSessions(false);
+        }
+    }
 
     async function fetchUser(token: string) {
         try {
@@ -365,7 +477,7 @@ export default function SettingsPage() {
     if (loading) {
         return (
             <div className="min-h-[calc(100vh-64px)] bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
-                <div className="max-w-md mx-auto">
+            <div className="max-w-3xl mx-auto">
                     <div className="text-center">
                         <h2 className="text-3xl font-extrabold text-gray-900">Loading...</h2>
                     </div>
@@ -376,7 +488,7 @@ export default function SettingsPage() {
 
     return (
         <div className="min-h-[calc(100vh-64px)] bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-md mx-auto">
+            <div className="max-w-xl mx-auto">
                 <div className="text-center mb-8">
                     <h2 className="text-3xl font-extrabold text-gray-900">Account Settings</h2>
                     <p className="mt-2 text-sm text-gray-600">
@@ -485,6 +597,72 @@ export default function SettingsPage() {
                                 </div>
                             </div>
                         </form>
+                    </div>
+
+                    {/* Sessions Section */}
+                    <div className="px-4 py-5 sm:p-6">
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Active Sessions</h3>
+                        <div className="mt-2 max-w-xl text-sm text-gray-500">
+                            <p>Manage your active sessions across devices</p>
+                        </div>
+
+                        <div className="mt-5 space-y-4">
+                            {loadingSessions ? (
+                                <p>Loading sessions...</p>
+                            ) : sessions.length === 0 ? (
+                                <p>No active sessions found</p>
+                            ) : (
+                                <div className="space-y-4">
+                                    {sessions.map((session) => (
+                                        <div key={session.id} 
+                                            className={`flex items-center justify-between p-3 rounded-lg border ${
+                                                session.is_current ? 'border-indigo-200 bg-indigo-50' : 'border-gray-200 bg-white'
+                                            }`}
+                                        >
+                                            <div className="flex items-center space-x-4 flex-1">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                                        {session.device_name}
+                                                    </p>
+                                                    <div className="flex space-x-4">
+                                                        <p className="text-sm text-gray-500">
+                                                            {session.ip_address}
+                                                        </p>
+                                                        <p className="text-sm text-gray-500">
+                                                            {new Date(session.created_at).toLocaleDateString()}{' '}
+                                                            {new Date(session.created_at).toLocaleTimeString()}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {!session.is_current && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => deleteSession(session.id)}
+                                                    disabled={deletingSession === session.id}
+                                                    className="ml-4 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                                >
+                                                    {deletingSession === session.id ? 'Terminating...' : 'Terminate'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    {sessions.length > 1 && (
+                                        <div className="mt-4">
+                                            <button
+                                                type="button"
+                                                onClick={deleteAllOtherSessions}
+                                                disabled={deletingAllSessions}
+                                                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                            >
+                                                {deletingAllSessions ? 'Terminating...' : 'Terminate All Other Sessions'}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* 2FA Section */}

@@ -22,7 +22,7 @@ const srpSessions: Record<string, {
 
 // Temporary tokens for 2FA verification (in-memory for simplicity)
 // In production, this should be stored in Redis or another distributed cache
-const tempTokens = new SuperMap<string, number>( {
+const tempTokens = new SuperMap<string, number>({
     intervalTime: 1000 * 60,
     expireAfter: 1000 * 60 * 5, // 5 minutes
 })
@@ -110,11 +110,36 @@ export async function userRoutes(server: FastifyInstance) {
                 srp_verifier,
             });
 
-            // Generate and store session token
+            // Generate session token
             const token = generateSessionToken();
-            await server.db.createSession(user.id, token);
 
-            return { 
+            // Get device info from user agent
+            const userAgent = request.headers['user-agent'] || 'Unknown Device';
+            let deviceName = 'Unknown Device';
+
+            if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+                deviceName = userAgent.includes('iPad') ? 'iPad' : 'iPhone';
+            } else if (userAgent.includes('Android')) {
+                deviceName = 'Android Device';
+                if (userAgent.includes('Mobile')) {
+                    deviceName = 'Android Phone';
+                } else if (userAgent.includes('Tablet')) {
+                    deviceName = 'Android Tablet';
+                }
+            } else if (userAgent.includes('Windows')) {
+                deviceName = 'Windows PC';
+            } else if (userAgent.includes('Macintosh')) {
+                deviceName = 'Mac';
+            } else if (userAgent.includes('Linux')) {
+                deviceName = 'Linux PC';
+            }
+
+            // Get IP address
+            const ipAddress = request.ip || '0.0.0.0';
+            // Create session
+            await server.db.createSession(user.id, token, deviceName, ipAddress);
+
+            return {
                 message: 'User registered successfully',
                 token
             };
@@ -237,13 +262,13 @@ export async function userRoutes(server: FastifyInstance) {
                 if (has2FA) {
                     // Generate temporary token for 2FA verification
                     const tempToken = generateTempToken();
-                    
+
                     // Store temporary token with expiration (5 minutes)
                     const expiresAt = new Date();
                     expiresAt.setMinutes(expiresAt.getMinutes() + 5);
-                    
+
                     tempTokens.set(tempToken, user.id)
-                    
+
                     // Return server proof and temporary token
                     return {
                         server_proof: serverSession.proof,
@@ -252,8 +277,34 @@ export async function userRoutes(server: FastifyInstance) {
                     };
                 } else {
                     // Generate and store session token
+                    // Generate session token
                     const token = generateSessionToken();
-                    await server.db.createSession(user.id, token);
+
+                    // Get device info
+                    const userAgent = request.headers['user-agent'] || 'Unknown Device';
+                    let deviceName = 'Unknown Device';
+
+                    if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+                        deviceName = userAgent.includes('iPad') ? 'iPad' : 'iPhone';
+                    } else if (userAgent.includes('Android')) {
+                        deviceName = 'Android Device';
+                        if (userAgent.includes('Mobile')) {
+                            deviceName = 'Android Phone';
+                        } else if (userAgent.includes('Tablet')) {
+                            deviceName = 'Android Tablet';
+                        }
+                    } else if (userAgent.includes('Windows')) {
+                        deviceName = 'Windows PC';
+                    } else if (userAgent.includes('Macintosh')) {
+                        deviceName = 'Mac';
+                    } else if (userAgent.includes('Linux')) {
+                        deviceName = 'Linux PC';
+                    }
+
+                    // Get IP address
+                    const ipAddress = request.ip || '0.0.0.0';
+                    // Create session
+                    await server.db.createSession(user.id, token, deviceName, ipAddress);
 
                     // Return server proof and token
                     return {
@@ -321,8 +372,34 @@ export async function userRoutes(server: FastifyInstance) {
             tempTokens.delete(temp_token);
 
             // Generate and store session token
+            // Generate session token
             const token = generateSessionToken();
-            await server.db.createSession(user.id, token);
+
+            // Get device info
+            const userAgent = request.headers['user-agent'] || 'Unknown Device';
+            let deviceName = 'Unknown Device';
+
+            if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+                deviceName = userAgent.includes('iPad') ? 'iPad' : 'iPhone';
+            } else if (userAgent.includes('Android')) {
+                deviceName = 'Android Device';
+                if (userAgent.includes('Mobile')) {
+                    deviceName = 'Android Phone';
+                } else if (userAgent.includes('Tablet')) {
+                    deviceName = 'Android Tablet';
+                }
+            } else if (userAgent.includes('Windows')) {
+                deviceName = 'Windows PC';
+            } else if (userAgent.includes('Macintosh')) {
+                deviceName = 'Mac';
+            } else if (userAgent.includes('Linux')) {
+                deviceName = 'Linux PC';
+            }
+
+            // Get IP address
+            const ipAddress = request.ip || '0.0.0.0';
+            // Create session
+            await server.db.createSession(user.id, token, deviceName, ipAddress);
 
             // Return token
             return { token };
@@ -346,7 +423,7 @@ export async function userRoutes(server: FastifyInstance) {
     }, async (request) => {
         const user = request.user as User;
         const fullUser = await server.db.getUser(user.id);
-        
+
         return {
             id: user.id,
             username: user.username,
@@ -440,10 +517,10 @@ export async function userRoutes(server: FastifyInstance) {
         try {
             // Generate a new TOTP secret
             const secret = authenticator.generateSecret();
-            
+
             // Create a QR code URL for easy setup
             const otpauth = authenticator.keyuri(user.username, 'Password Manager', secret);
-            
+
             // Return the secret and QR code URL (don't save yet until verified)
             return {
                 secret,
@@ -476,14 +553,14 @@ export async function userRoutes(server: FastifyInstance) {
         try {
             // Verify the token
             const isValid = authenticator.verify({ token, secret });
-            
+
             if (!isValid) {
                 return reply.code(400).send({ error: 'Invalid verification code' });
             }
-            
+
             // Save the TOTP secret
             await server.db.setTotpSecret(user.id, secret);
-            
+
             return { message: '2FA enabled successfully' };
         } catch (error) {
             server.log.error(error);
@@ -511,25 +588,148 @@ export async function userRoutes(server: FastifyInstance) {
         try {
             // Get the user's TOTP secret
             const fullUser = await server.db.getUser(user.id);
-            
+
             if (!fullUser?.totp_secret) {
                 return reply.code(400).send({ error: '2FA is not enabled' });
             }
-            
+
             // Verify the token
             const isValid = authenticator.verify({ token, secret: fullUser.totp_secret });
-            
+
             if (!isValid) {
                 return reply.code(400).send({ error: 'Invalid verification code' });
             }
-            
+
             // Remove the TOTP secret
             await server.db.removeTotpSecret(user.id);
-            
+
             return { message: '2FA disabled successfully' };
         } catch (error) {
             server.log.error(error);
             return reply.code(500).send({ error: 'Internal Server Error' });
         }
+    });
+
+    // Get active sessions for current user
+    server.get('/sessions', {
+        schema: {
+            security: [{ bearerAuth: [] }],
+            response: {
+                200: Type.Array(Type.Object({
+                    id: Type.Number(),
+                    device_name: Type.String(),
+                    ip_address: Type.String(),
+                    created_at: Type.String(),
+                    expires_at: Type.String(),
+                    is_current: Type.Boolean(),
+                })),
+            },
+        },
+    }, async (request) => {
+        const user = request.user as User;
+        const currentToken = request.headers.authorization?.replace('Bearer ', '');
+
+        // Get all active sessions
+        const sessions = await server.db.getUserSessions(user.id);
+
+        // Get current session to mark it
+        const currentSession = await server.db.getUserSession(currentToken!);
+
+        return sessions.map(session => ({
+            id: session.id,
+            device_name: session.device_name,
+            ip_address: session.ip_address,
+            created_at: session.created_at.toISOString(),
+            expires_at: session.expires_at.toISOString(),
+            is_current: session.id === currentSession!.id
+        }));
+    });
+
+    // Delete a specific session
+    server.delete('/sessions/:id', {
+        schema: {
+            security: [{ bearerAuth: [] }],
+            params: Type.Object({
+                id: Type.Number(),
+            }),
+            response: {
+                200: Type.Object({
+                    message: Type.String(),
+                }),
+            },
+        },
+    }, async (request, reply) => {
+        const user = request.user as User;
+        const sessionId = Number((request.params as any).id);
+        const currentToken = request.headers.authorization?.replace('Bearer ', '');
+
+        // Get current session to prevent self-deletion
+        const currentSession = await server.db.getUserSession(currentToken!);
+
+        if (currentSession?.id === sessionId) {
+            return reply.code(400).send({ error: 'Cannot delete current session' });
+        }
+
+        const deleted = await server.db.deleteSession(sessionId, user.id);
+
+        if (!deleted) {
+            return reply.code(404).send({ error: 'Session not found' });
+        }
+
+        return { message: 'Session deleted successfully' };
+    });
+
+    // Logout: Delete current session
+    server.post('/logout', {
+        schema: {
+            security: [{ bearerAuth: [] }],
+            response: {
+                200: Type.Object({
+                    message: Type.String()
+                })
+            }
+        }
+    }, async (request, reply) => {
+        const user = request.user as User;
+        const currentToken = request.headers.authorization?.replace('Bearer ', '');
+        
+        // Get current session
+        const currentSession = await server.db.getUserSession(currentToken!);
+        
+        if (!currentSession) {
+            return reply.code(404).send({ error: 'Session not found' });
+        }
+        
+        // Delete the current session
+        await server.db.deleteSession(currentSession.id, user.id);
+        
+        return { message: 'Logged out successfully' };
+    });
+
+    // Delete all other sessions
+    server.delete('/sessions', {
+        schema: {
+            security: [{ bearerAuth: [] }],
+            response: {
+                200: Type.Object({
+                    message: Type.String(),
+                    count: Type.Number(),
+                }),
+            },
+        },
+    }, async (request) => {
+        const user = request.user as User;
+        const currentToken = request.headers.authorization?.replace('Bearer ', '');
+
+        // Get current session ID
+        const currentSession = await server.db.getUserSession(currentToken!);
+
+        // Delete all other sessions
+        const count = await server.db.deleteOtherSessions(currentSession!.id, user.id);
+
+        return {
+            message: 'Other sessions deleted successfully',
+            count
+        };
     });
 }

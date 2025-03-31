@@ -163,6 +163,17 @@ export class Database {
 
     /** Session Methods */
 
+    public async getUserSessions(userId: number): Promise<Session[]> {
+        const query = `
+            SELECT *
+            FROM user_sessions
+            WHERE user_id = $1 AND expires_at > NOW()
+            ORDER BY created_at DESC
+        `;
+        const result = await this.pool?.query(query, [userId]);
+        return result?.rows || [];
+    }
+
     public async getUserSession(token: string): Promise<Session | undefined> {
         const query = `
             SELECT s.*, u.username
@@ -174,17 +185,37 @@ export class Database {
         return result?.rows[0];
     }
 
-    public async createSession(userId: number, token: string): Promise<Session> {
+    public async createSession(userId: number, token: string, deviceName: string, ipAddress: string): Promise<Session> {
         const query = `
-            INSERT INTO user_sessions (user_id, token, expires_at)
-            VALUES ($1, $2, NOW() + INTERVAL '2 weeks')
+            INSERT INTO user_sessions (user_id, token, device_name, ip_address, expires_at)
+            VALUES ($1, $2, $3, $4, NOW() + INTERVAL '2 weeks')
             RETURNING *
         `;
-        const result = await this.pool?.query(query, [userId, token]);
+        const result = await this.pool?.query(query, [userId, token, deviceName, ipAddress]);
         if (!result?.rows[0]) {
             throw new Error('Failed to create session');
         }
         return result.rows[0];
+    }
+
+    public async deleteSession(sessionId: number, userId: number): Promise<boolean> {
+        const query = `
+            DELETE FROM user_sessions 
+            WHERE id = $1 AND user_id = $2
+            RETURNING id
+        `;
+        const result = await this.pool?.query(query, [sessionId, userId]);
+        return result?.rowCount === 1;
+    }
+
+    public async deleteOtherSessions(currentSessionId: number, userId: number): Promise<number> {
+        const query = `
+            DELETE FROM user_sessions 
+            WHERE user_id = $1 AND id != $2
+            RETURNING id
+        `;
+        const result = await this.pool?.query(query, [userId, currentSessionId]);
+        return result?.rowCount || 0;
     }
 
     public async cleanupExpiredSessions(): Promise<number> {
@@ -427,6 +458,8 @@ export interface Session {
     id: number;
     user_id: number;
     token: string;
+    device_name: string;
+    ip_address: string;
     created_at: Date;
     expires_at: Date;
 }

@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token VARCHAR(1000) NOT NULL,
+    device_name VARCHAR(255) NOT NULL,
+    ip_address VARCHAR(255) NOT NULL,
     created_at timestamp DEFAULT CURRENT_TIMESTAMP,
     expires_at timestamp NOT NULL
 );
