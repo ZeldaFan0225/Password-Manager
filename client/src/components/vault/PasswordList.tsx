@@ -47,7 +47,7 @@ export default function PasswordList({
     });
 
     return (
-        <div className="w-1/4 border-r border-gray-200">
+        <div className="lg:w-1/4 w-full lg:border-r border-gray-200">
             <div className="px-4 pt-5 pb-3">
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="text-lg font-medium text-gray-900">Passwords</h2>
@@ -76,7 +76,7 @@ export default function PasswordList({
                     </div>
                 </div>
             </div>
-            <ul className="divide-y divide-gray-200 max-h-[calc(100vh-16rem)] overflow-y-auto">
+            <ul className="divide-y divide-gray-200 lg:max-h-[calc(100vh-16rem)] max-h-[calc(100vh-24rem)] overflow-y-auto">
                 {filteredPasswords.map((password) => (
                     <li 
                         key={password.id}

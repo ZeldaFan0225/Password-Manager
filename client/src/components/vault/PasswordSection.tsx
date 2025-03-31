@@ -28,15 +28,15 @@ export default function PasswordSection({
     onDelete
 }: PasswordSectionProps) {
     return (
-        <div className="w-3/4">
-            <div className="px-6 py-5">
+        <div className="lg:w-3/4 w-full">
+            <div className="px-4 lg:px-6 py-5 border-t lg:border-t-0">
                 <h2 className="text-lg font-medium text-gray-900">
                     {isCreating ? 'New Password' : 
                      selectedPassword ? (isEditing ? 'Edit Password' : 'Password Details') : 
                      'Select a password'}
                 </h2>
             </div>
-            <div className="px-6 py-5">
+            <div className="px-4 lg:px-6 py-5">
                 {isCreating || isEditing ? (
                     <PasswordForm
                         initialData={selectedDecryptedData || undefined}

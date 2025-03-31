@@ -37,6 +37,20 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
 
     // State hooks
     const [masterKey, setMasterKey] = useState('');
+    const [isMobile, setIsMobile] = useState(false);
+
+    // Handle window resize
+    useEffect(() => {
+        const handleResize = () => {
+            setIsMobile(window.innerWidth < 1024);
+        };
+        
+        // Set initial value
+        handleResize();
+        
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
     const [isUnlocking, setIsUnlocking] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -609,24 +623,24 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                 <div className="min-h-[calc(100vh-64px)] bg-gray-100">
                     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                         <div className="px-4 py-6 sm:px-0">
-                            <div className="flex justify-between items-center mb-6">
-                                <div>
-                                    <h1 className="text-3xl font-bold text-gray-900">
+                            <div className="lg:flex lg:justify-between lg:items-center mb-6">
+                                <div className="mb-4 lg:mb-0">
+                                    <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
                                         {vault?.name}
                                     </h1>
                                 </div>
-                                <div className="flex items-center space-x-3">
+                                <div className="flex flex-col lg:flex-row space-y-3 lg:space-y-0 lg:space-x-3">
                                     {!isSettingsOpen ? (
                                         <button
                                             onClick={() => setIsSettingsOpen(true)}
-                                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                                            className="w-full lg:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
                                         >
                                             Settings
                                         </button>
                                     ) : (
                                         <button
                                             onClick={() => setIsSettingsOpen(false)}
-                                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600"
+                                            className="w-full lg:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600"
                                         >
                                             Back to Passwords
                                         </button>
@@ -634,7 +648,7 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                                     <div className="relative">
                                         <button
                                             onClick={handleLockVault}
-                                            className="relative inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white overflow-hidden w-38"
+                                            className="w-full lg:w-38 relative inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white overflow-hidden"
                                         >
                                             <div className="absolute inset-0 bg-yellow-600" style={{ zIndex: 0 }}></div>
                                             <div 
@@ -687,8 +701,64 @@ export default function VaultPage({ params }: { params: Promise<{ id: string }> 
                                         canExport={!!encryptionKey}
                                     />
                                 </div>
+                            ) : (!selectedPassword && !isCreating) && isMobile ? (
+                                <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+                                    <PasswordList 
+                                        passwords={passwords}
+                                        decryptedData={decryptedData}
+                                        selectedPassword={selectedPassword}
+                                        searchQuery={searchQuery}
+                                        onSearchChange={setSearchQuery}
+                                        onDecryptPassword={decryptPassword}
+                                        onCreate={() => {
+                                            setIsCreating(true);
+                                            setIsEditing(false);
+                                            setSelectedPassword(null);
+                                            setSelectedDecryptedData(null);
+                                        }}
+                                    />
+                                </div>
+                            ) : (selectedPassword || isCreating) && isMobile ? (
+                                <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+                                    <div className="px-4 py-2 border-b border-gray-200">
+                                        <button
+                                            onClick={() => {
+                                                if (isCreating) {
+                                                    setIsCreating(false);
+                                                } else {
+                                                    setSelectedPassword(null);
+                                                    setSelectedDecryptedData(null);
+                                                    setIsEditing(false);
+                                                }
+                                            }}
+                                            className="flex items-center text-indigo-600"
+                                        >
+                                            <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                            </svg>
+                                            {isCreating ? 'Cancel New Password' : 'Back to Passwords'}
+                                        </button>
+                                    </div>
+                                    <PasswordSection
+                                        selectedPassword={selectedPassword}
+                                        selectedDecryptedData={selectedDecryptedData}
+                                        isCreating={isCreating}
+                                        isEditing={isEditing}
+                                        passwords={passwords}
+                                        onCancel={() => {
+                                            setIsCreating(false);
+                                            setIsEditing(false);
+                                            if (!selectedDecryptedData) {
+                                                setSelectedPassword(null);
+                                            }
+                                        }}
+                                        onSave={handleSavePassword}
+                                        onEdit={() => setIsEditing(true)}
+                                        onDelete={handleDeletePassword}
+                                    />
+                                </div>
                             ) : (
-                                <div className="flex bg-white shadow-sm rounded-lg overflow-hidden">
+                                <div className="lg:flex bg-white shadow-sm rounded-lg overflow-hidden">
                                     <PasswordList 
                                         passwords={passwords}
                                         decryptedData={decryptedData}
